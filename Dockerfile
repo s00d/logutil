@@ -1,11 +1,6 @@
 # Define versions used to select image versions
 # (ARGs declared before FROM can't be used outside of FROMs)
-ARG FROM_PHP=8.0
-
-# Select distro
-ARG FROM_DISTRO=bullseye
-
-FROM php:${FROM_PHP}-fpm-${FROM_DISTRO}
+FROM debian:bullseye-slim
 
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 
