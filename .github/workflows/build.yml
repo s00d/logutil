@@ -63,10 +63,12 @@ jobs:
           docker build --build-arg TARGET=${{ matrix.target }} -t rust-builder .
           docker run --rm -v $PWD:/code -w /code rust-builder bash -c 'cargo build --release --target ${{ matrix.target }}'
 
-      - name: Rename and Upload artifact
+      - name: Rename binary
         run: |
           mkdir -p artifacts
           cp target/${{ matrix.target }}/release/logutil artifacts/logutil-${{ matrix.target }}
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}-binary
