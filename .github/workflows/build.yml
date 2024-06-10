@@ -26,11 +26,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
@@ -41,16 +41,16 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
         with:
           driver-opts: network=host
 
       - name: Setup docker
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -60,7 +60,7 @@ jobs:
       - name: Build in Docker
         run: |
           docker run --rm --privileged tonistiigi/binfmt --install all
-          docker build --target ${{ matrix.target }} -t rust-builder .
+          docker build --target ${{ matrix.platform }} -t rust-builder .
           docker run --rm -v $PWD:/code -w /code rust-builder bash -c 'cargo build --release --target ${{ matrix.target }}'
 
       - name: Rename binary
