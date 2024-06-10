@@ -1,24 +1,16 @@
-# Define versions used to select image versions
-# (ARGs declared before FROM can't be used outside of FROMs)
-ARG RUST_VERSION=1.78
+# Select distro
+ARG FROM_DISTRO=bullseye
 
-FROM rust:${RUST_VERSION}
+FROM php8.1-fpm-${FROM_DISTRO}
 
-# Install necessary dependencies
-RUN apt-get update && apt-get install -y \
-    gcc-aarch64-linux-gnu \
-    build-essential \
-    libssl-dev \
-    pkg-config \
-    cmake \
-    curl \
-    git
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 
-# Setup the work directory
+RUN apt-get update && apt install curl build-essential gcc libclang-dev make openssl libssl-dev git -y
+
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+
+RUN echo 'source $HOME/.cargo/env' >> $HOME/.bashrc
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 WORKDIR /code
-
-# Copy the project files
-COPY . .
-
-# Build the project
-CMD ["bash"]
+ENTRYPOINT [ "" ]
