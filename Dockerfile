@@ -1,7 +1,6 @@
 # Define versions used to select image versions
 # (ARGs declared before FROM can't be used outside of FROMs)
 ARG RUST_VERSION=1.60
-ARG TARGET
 
 FROM rust:${RUST_VERSION}
 
@@ -14,9 +13,6 @@ RUN apt-get update && apt-get install -y \
     cmake \
     curl \
     git
-
-# Add necessary targets
-RUN rustup target add ${TARGET}
 
 # Setup the work directory
 WORKDIR /code
