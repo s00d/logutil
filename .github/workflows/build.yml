@@ -13,7 +13,11 @@ permissions:
 
 jobs:
   build:
-
+    services:
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
     runs-on: ubuntu-latest
 
     strategy:
@@ -54,14 +58,12 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          push: false
-          tags: rust-builder:latest
+          push: true
+          tags: localhost:5000/logutil:latest
 
-      - name: Build in Docker
+      - name: Build
         run: |
-          docker run --rm --privileged tonistiigi/binfmt --install all
-          docker build --target ${{ matrix.platform }} -t rust-builder .
-          docker run --rm -v $PWD:/code -w /code rust-builder bash -c 'cargo build --release --target ${{ matrix.target }}'
+          docker run -v ~/.cargo/registry:/root/.cargo/registry -v ~/.cargo/git:/root/.cargo/git --platform ${{ matrix.platform }} --rm -v $PWD:/code localhost:5000/php-build:latest bash -c 'rustup target add ${{ matrix.target }} ; cargo build --release --target ${{ matrix.target }}'
 
       - name: Rename binary
         run: |
