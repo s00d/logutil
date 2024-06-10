@@ -48,7 +48,6 @@ jobs:
 
 
       - name: Build
-        env:
         run: cargo build --release --target ${{ matrix.target }}
 
 
