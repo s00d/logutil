@@ -1,0 +1,18 @@
+[package]
+name = "logutil"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+regex = "1"
+structopt = "0.3"
+log = "0.4.21"
+crossterm = "0.27"
+
+[profile.release]
+opt-level = "z" # Оптимизация для размера
+lto = true # Включение Link Time Optimization
+codegen-units = 1 # Уменьшение количества единиц компиляции для лучшей оптимизации
+panic = "abort" # Уменьшение объема кода для обработки паник
+strip = true # Удаление символов отладки
