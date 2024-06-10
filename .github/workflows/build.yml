@@ -60,7 +60,7 @@ jobs:
       - name: Build in Docker
         run: |
           docker run --rm --privileged tonistiigi/binfmt --install all
-          docker build -t rust-builder .
+          docker build --target ${{ matrix.target }} -t rust-builder .
           docker run --rm -v $PWD:/code -w /code rust-builder bash -c 'cargo build --release --target ${{ matrix.target }}'
 
       - name: Rename binary
