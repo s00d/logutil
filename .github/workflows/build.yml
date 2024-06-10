@@ -19,11 +19,9 @@ jobs:
     strategy:
       matrix:
         include:
-          -
-            target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-gnu
             platform: linux/amd64
-          -
-            target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-gnu
             platform: linux/arm64
 
     steps:
@@ -57,7 +55,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           push: false
-          tags: rust-build:latest
+          tags: rust-builder:latest
 
       - name: Build in Docker
         run: |
@@ -65,11 +63,14 @@ jobs:
           docker build --build-arg TARGET=${{ matrix.target }} -t rust-builder .
           docker run --rm -v $PWD:/code -w /code rust-builder bash -c 'cargo build --release --target ${{ matrix.target }}'
 
-      - name: Upload artifact
+      - name: Rename and Upload artifact
+        run: |
+          mkdir -p artifacts
+          cp target/${{ matrix.target }}/release/logutil artifacts/logutil-${{ matrix.target }}
         uses: actions/upload-artifact@v2
         with:
           name: ${{ matrix.target }}-binary
-          path: target/${{ matrix.target }}/release/logutil
+          path: artifacts/logutil-${{ matrix.target }}
 
       - name: Get Cargo Version
         id: cargo_version
@@ -93,4 +94,4 @@ jobs:
         with:
           tag_name: v${{ env.VERSION }}
           files: |
-            target/${{ matrix.target }}/release/logutil
+            artifacts/logutil-${{ matrix.target }}

@@ -1,6 +1,6 @@
 # Define versions used to select image versions
 # (ARGs declared before FROM can't be used outside of FROMs)
-ARG RUST_VERSION=stable
+ARG RUST_VERSION=1.60
 ARG TARGET
 
 FROM rust:${RUST_VERSION}
