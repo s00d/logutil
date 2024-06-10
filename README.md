@@ -55,7 +55,7 @@ The project includes a GitHub Actions workflow that automatically builds the pro
 
 ### Workflow Configuration
 
-The workflow file is located at `.github/workflows/rust.yml`. It performs the following steps:
+The workflow file is located at `.github/workflows/build.yml`. It performs the following steps:
 
 1. Checks out the code.
 2. Installs the Rust toolchain and necessary targets.
