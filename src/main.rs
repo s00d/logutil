@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use regex::Regex;
 use structopt::StructOpt;
 use tokio::time::sleep;
-use crossterm::{ExecutableCommand, terminal::{Clear, ClearType}, cursor::MoveTo};
+use prettytable::{Table, Row, Cell, Attr, format, row};
 
 #[derive(StructOpt)]
 #[structopt(name = "Log Analyzer", about = "A tool to analyze Nginx access logs.")]
@@ -89,7 +90,6 @@ impl LogData {
         )
     }
 
-
     fn get_unique_counts(&self) -> (usize, usize) {
         (self.by_ip.len(), self.by_url.len())
     }
@@ -136,25 +136,55 @@ async fn tail_file(file_path: &str, mode: &str, regex_pattern: &str, log_data: &
 }
 
 async fn print_stats(log_data: &Arc<Mutex<LogData>>, top_n: usize) {
-    let mut stdout = std::io::stdout();
-    stdout.execute(Clear(ClearType::All)).unwrap();
-    stdout.execute(MoveTo(0, 0)).unwrap();
+    if cfg!(target_os = "windows") {
+        Command::new("cls").status().unwrap();
+    } else {
+        Command::new("clear").status().unwrap();
+    }
 
     let log_data = log_data.lock().unwrap();
     let (top_ips, top_urls) = log_data.get_top_n(top_n);
     let (unique_ips, unique_urls) = log_data.get_unique_counts();
 
-    println!("Total requests: {}", log_data.total_requests);
-    println!("Unique IPs: {}", unique_ips);
-    println!("Unique URLs: {}", unique_urls);
+    let mut table = Table::new();
+    table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+    table.add_row(Row::new(vec![
+        Cell::new("Total requests").with_style(Attr::Bold),
+        Cell::new(&log_data.total_requests.to_string()),
+        Cell::new(""),
+        Cell::new("Unique IPs").with_style(Attr::Bold),
+        Cell::new(&unique_ips.to_string()),
+        Cell::new(""),
+        Cell::new("Unique URLs").with_style(Attr::Bold),
+        Cell::new(&unique_urls.to_string()),
+        Cell::new(""),
+    ]));
 
-    println!("\nTop {} IPs:", top_n);
+    table.printstd();
+
+    println!("");
+
+    let mut ip_table = Table::new();
+    ip_table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+    ip_table.set_titles(Row::new(vec![
+        Cell::new("Top IPs").with_style(Attr::Bold),
+        Cell::new("Requests").with_style(Attr::Bold),
+    ]));
     for (ip, count) in top_ips {
-        println!("{}: {}", ip, count);
+        ip_table.add_row(row![ip, count.to_string()]);
+    }
+    ip_table.printstd();
+    println!("");
+
+    let mut url_table = Table::new();
+    url_table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+    url_table.set_titles(Row::new(vec![
+        Cell::new("Top URLs").with_style(Attr::Bold),
+        Cell::new("Requests").with_style(Attr::Bold),
+    ]));
+    for (url, count) in top_urls {
+        url_table.add_row(row![url, count.to_string()]);
     }
 
-    println!("\nTop {} URLs:", top_n);
-    for (url, count) in top_urls {
-        println!("{}: {}", url, count);
-    }
+    url_table.printstd();
 }
