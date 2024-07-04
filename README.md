@@ -11,6 +11,9 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 - Allows customizing the regular expression used for log parsing.
 - Supports loading the regular expression from a file.
 - Automatic cleanup of outdated entries if there are more than 10,000 records (can be disabled with `--no-clear`).
+- Displays the last 10 requests for top IPs.
+- Allows filtering results by IP address.
+- Supports pausing and resuming the output with the 'p' key.
 
 ## Usage
 
@@ -18,9 +21,13 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 
 - `--file`: Path to the log file (default: `access.log`).
 - `--mode`: Mode of operation (`new` to read new data from the end, `all` to read the entire file; default: `new`).
-- `--regex`: Regular expression to parse the log entries or path to a file containing the regex (default: `^(\S+) - "-\|-" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*"`).
+- `--last`: Number of lines to read from the end of the file in 'new' mode (default: `0`).
+- `--regex`: Regular expression to parse the log entries or path to a file containing the regex (default: `^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*`).
 - `--top`: Number of top entries to display (default: `10`).
 - `--no-clear`: Disable automatic cleanup of outdated entries.
+- `--show-last-requests`: Display the last 10 requests for top IPs.
+- `--filter-ip`: Filter results by IP address.
+
 
 ### Example
 

@@ -7,10 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use chrono::Local;
 use prettytable::{format, row, Attr, Cell, Row, Table};
-use rdev::{EventType, listen};
 use regex::Regex;
 use structopt::StructOpt;
-use tokio::sync::mpsc;
 use tokio::time::sleep;
 
 const MODE_VALS: &[&str] = &["new", "all"];
@@ -29,6 +27,10 @@ struct Cli {
     /// Number of lines to read from the end of the file in 'new' mode
     #[structopt(short = "c", long, default_value = "0")]
     last: usize,
+
+    /// Number of lines to read from the end of the file in 'new' mode
+    #[structopt(long, default_value = "5")]
+    refresh: u64,
 
     /// Regular expression to parse the log entries or path to a file containing the regex
     #[structopt(
@@ -61,6 +63,7 @@ async fn main() {
     let file_path = args.file.clone();
     let mode = args.mode.clone();
     let last = args.last;
+    let refresh = args.refresh;
     let regex_pattern = if Path::new(&args.regex).exists() {
         fs::read_to_string(&args.regex).expect("Could not read regex file")
     } else {
@@ -74,41 +77,19 @@ async fn main() {
     let log_data = Arc::new(Mutex::new(LogData::new()));
     let log_data_clone = Arc::clone(&log_data);
 
-    let (pause_tx, mut pause_rx) = mpsc::channel(1);
-    let (resume_tx, mut resume_rx) = mpsc::channel(1);
-
     tokio::spawn(async move {
         let _ = tail_file(&file_path, &mode, last, &regex_pattern, &log_data_clone, no_clear).await;
         loop {
             tokio::select! {
-                _ = pause_rx.recv() => {
-                    // Paused
-                    resume_rx.recv().await;
-                },
                 _ = tail_file(&file_path, &mode, 0, &regex_pattern, &log_data_clone, no_clear) => {},
                 _ = sleep(Duration::from_secs(1)) => {},
             }
         }
     });
 
-    // Обработка ввода для паузы и продолжения
-    tokio::spawn(async move {
-        listen(move |event| {
-            if let EventType::KeyPress(key) = event.event_type {
-                if key == rdev::Key::KeyP {
-                    if pause_tx.is_closed() {
-                        let _ = resume_tx.try_send(());
-                    } else {
-                        let _ = pause_tx.try_send(());
-                    }
-                }
-            }
-        }).unwrap();
-    });
-
     loop {
         print_stats(&log_data, top_n, show_last_requests, filter_ip.as_deref()).await;
-        sleep(Duration::from_secs(5)).await;
+        sleep(Duration::from_secs(refresh)).await;
     }
 }
 
@@ -367,6 +348,4 @@ async fn print_stats(
             }
         }
     }
-
-    println!("\nPress 'p' to pause/resume updates.");
 }

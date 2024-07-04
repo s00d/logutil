@@ -11,7 +11,6 @@ log = "0.4.22"
 crossterm = "0.27"
 prettytable = "0.10.0"
 chrono = "0.4.38"
-rdev = "0.5.3"
 
 [profile.release]
 opt-level = "z" # Оптимизация для размера
