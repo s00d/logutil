@@ -13,7 +13,6 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 - Automatic cleanup of outdated entries if there are more than 10,000 records (can be disabled with `--no-clear`).
 - Displays the last 10 requests for top IPs.
 - Allows filtering results by IP address.
-- Supports pausing and resuming the output with the 'p' key.
 
 ## Usage
 
