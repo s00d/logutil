@@ -1,3 +1,6 @@
+use chrono::Local;
+use prettytable::{format, row, Attr, Cell, Row, Table};
+use regex::Regex;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -5,9 +8,6 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
-use chrono::Local;
-use prettytable::{format, row, Attr, Cell, Row, Table};
-use regex::Regex;
 use structopt::StructOpt;
 use tokio::time::sleep;
 
@@ -178,7 +178,9 @@ impl LogData {
     }
 
     fn get_last_requests(&self, ip: &str) -> Vec<String> {
-        self.by_ip.get(ip).map_or(Vec::new(), |entry| entry.last_requests.clone())
+        self.by_ip
+            .get(ip)
+            .map_or(Vec::new(), |entry| entry.last_requests.clone())
     }
 }
 
@@ -198,7 +200,11 @@ async fn tail_file(
 
         let content = String::from_utf8_lossy(&buffer);
         let lines: Vec<&str> = content.lines().collect();
-        let start = if lines.len() > count as usize { lines.len() - count as usize } else { 0 };
+        let start = if lines.len() > count as usize {
+            lines.len() - count as usize
+        } else {
+            0
+        };
 
         for line in &lines[start..] {
             process_line(line, &regex_pattern, log_data, no_clear).await?;
@@ -251,7 +257,6 @@ async fn process_line(
 
     Ok(())
 }
-
 
 async fn print_stats(
     log_data: &Arc<Mutex<LogData>>,
