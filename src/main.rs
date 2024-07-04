@@ -2,6 +2,7 @@ use chrono::Local;
 use prettytable::{format, row, Attr, Cell, Row, Table};
 use regex::Regex;
 use std::collections::HashMap;
+use std::env;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -53,6 +54,11 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+
+    if let Err(e) = env::set_current_dir(env::current_dir().expect("Failed to get current directory")) {
+        eprintln!("Failed to set current directory: {:?}", e);
+    }
+
     let args = Cli::from_args();
     let file_path = args.file.clone();
     let count = args.count;
