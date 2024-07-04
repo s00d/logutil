@@ -1,3 +1,5 @@
+Here's the updated README reflecting the changes:
+
 # Log Util
 
 Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads log files, extracts and counts requests by IP addresses and URLs, and displays the top IP addresses and URLs. The tool can handle large log files by reading only new data as it is appended, or by processing the entire file from the beginning.
@@ -6,7 +8,6 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 
 - Reads Nginx access logs and extracts IP addresses and URLs.
 - Counts and displays the top IP addresses and URLs.
-- Can operate in two modes: `new` (read only new data) and `all` (read the entire file).
 - Supports specifying the number of top entries to display.
 - Allows customizing the regular expression used for log parsing.
 - Supports loading the regular expression from a file.
@@ -19,8 +20,7 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 ### Command-line Options
 
 - `--file`: Path to the log file (default: `access.log`).
-- `--mode`: Mode of operation (`new` to read new data from the end, `all` to read the entire file; default: `new`).
-- `--last`: Number of lines to read from the end of the file in 'new' mode (default: `0`).
+- `--count`: Number of lines to read from the end of the file (`0` to start from the end, `-1` to read the entire file; default: `0`).
 - `--regex`: Regular expression to parse the log entries or path to a file containing the regex (default: `^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*`).
 - `--top`: Number of top entries to display (default: `10`).
 - `--no-clear`: Disable automatic cleanup of outdated entries.
@@ -30,8 +30,22 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 
 ### Example
 
+To read the entire log file:
+
 ```sh
-cargo run -- --file "/path/to/access.log" --mode all --top 20
+cargo run -- --file "./access.log" --count=-1
+```
+
+To read the last 100 lines from the log file:
+
+```sh
+cargo run -- --file "./access.log" --count=100
+```
+
+To read new data from the end of the log file as it is appended:
+
+```sh
+cargo run -- --file "./access.log" --count=0
 ```
 
 ### Loading Regular Expression from a File
@@ -39,7 +53,7 @@ cargo run -- --file "/path/to/access.log" --mode all --top 20
 If the `--regex` parameter points to a file, the regular expression will be read from that file.
 
 ```sh
-cargo run -- --file "/path/to/access.log" --regex "/path/to/regex.txt" --mode all --top 20
+cargo run -- --file "/path/to/access.log" --regex "/path/to/regex.txt" --top 20
 ```
 
 ## Installation
@@ -63,7 +77,7 @@ cargo run -- --file "/path/to/access.log" --regex "/path/to/regex.txt" --mode al
 
 3. Run the project:
     ```sh
-    cargo run -- --file "/path/to/access.log" --mode all --top 20
+    cargo run -- --file "/path/to/access.log" --count=-1 --top 20
     ```
 
 ## GitHub Actions
@@ -117,7 +131,7 @@ Below are 10 different example regular expressions for parsing logs from various
 
 1. **Nginx Access Log (default)**
     ```regex
-    ^(\S+) - "-\|-" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*
+    ^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*
     ```
 
 2. **Apache Access Log**

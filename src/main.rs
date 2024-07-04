@@ -11,8 +11,6 @@ use regex::Regex;
 use structopt::StructOpt;
 use tokio::time::sleep;
 
-const MODE_VALS: &[&str] = &["new", "all"];
-
 #[derive(StructOpt)]
 #[structopt(name = "Log Analyzer", about = "A tool to analyze Nginx access logs.")]
 struct Cli {
@@ -20,13 +18,9 @@ struct Cli {
     #[structopt(short, long, default_value = "access.log")]
     file: String,
 
-    /// Mode of operation: 'new' to read new data from the end, 'all' to read the entire file
-    #[structopt(short, long, possible_values(MODE_VALS), default_value = "new")]
-    mode: String,
-
-    /// Number of lines to read from the end of the file in 'new' mode
+    /// Number of lines to read from the end of the file (0 to start from the end, -1 to read the entire file)
     #[structopt(short = "c", long, default_value = "0")]
-    last: usize,
+    count: isize,
 
     /// Refresh interval for console updates in seconds
     #[structopt(long, default_value = "5")]
@@ -61,8 +55,7 @@ struct Cli {
 async fn main() {
     let args = Cli::from_args();
     let file_path = args.file.clone();
-    let mode = args.mode.clone();
-    let last = args.last;
+    let count = args.count;
     let refresh = args.refresh;
     let regex_pattern = if Path::new(&args.regex).exists() {
         fs::read_to_string(&args.regex).expect("Could not read regex file")
@@ -78,10 +71,10 @@ async fn main() {
     let log_data_clone = Arc::clone(&log_data);
 
     tokio::spawn(async move {
-        let _ = tail_file(&file_path, &mode, last, &regex_pattern, &log_data_clone, no_clear).await;
+        let _ = tail_file(&file_path, count, &regex_pattern, &log_data_clone, no_clear).await;
         loop {
             tokio::select! {
-                _ = tail_file(&file_path, &mode, 0, &regex_pattern, &log_data_clone, no_clear) => {},
+                _ = tail_file(&file_path, 0, &regex_pattern, &log_data_clone, no_clear) => {},
                 _ = sleep(Duration::from_secs(1)) => {},
             }
         }
@@ -191,8 +184,7 @@ impl LogData {
 
 async fn tail_file(
     file_path: &str,
-    mode: &str,
-    count: usize,
+    count: isize,
     regex_pattern: &str,
     log_data: &Arc<Mutex<LogData>>,
     no_clear: bool,
@@ -200,18 +192,18 @@ async fn tail_file(
     let file = File::open(file_path)?;
     let mut reader = BufReader::new(file);
 
-    if mode == "new" && count > 0 {
+    if count > 0 {
         let mut buffer = Vec::new();
         reader.read_to_end(&mut buffer)?;
 
         let content = String::from_utf8_lossy(&buffer);
         let lines: Vec<&str> = content.lines().collect();
-        let start = if lines.len() > count { lines.len() - count } else { 0 };
+        let start = if lines.len() > count as usize { lines.len() - count as usize } else { 0 };
 
         for line in &lines[start..] {
             process_line(line, &regex_pattern, log_data, no_clear).await?;
         }
-    } else if mode == "all" {
+    } else if count == -1 {
         reader.seek(SeekFrom::Start(0))?;
         let re = Regex::new(regex_pattern).unwrap();
 
