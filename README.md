@@ -1,4 +1,4 @@
-Here's the updated README reflecting the changes:
+I apologize for the oversight. Here's the updated README reflecting the current state of the code and including the hotkeys:
 
 # Log Util
 
@@ -12,7 +12,7 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 - Allows customizing the regular expression used for log parsing.
 - Supports loading the regular expression from a file.
 - Automatic cleanup of outdated entries if there are more than 10,000 records (can be disabled with `--no-clear`).
-- Displays the last 10 requests for top IPs.
+- Displays the last requests for top IPs.
 - Allows filtering results by IP address.
 
 ## Usage
@@ -24,9 +24,7 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 - `--regex`: Regular expression to parse the log entries or path to a file containing the regex (default: `^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*`).
 - `--top`: Number of top entries to display (default: `10`).
 - `--no-clear`: Disable automatic cleanup of outdated entries.
-- `--show-last-requests`: Display the last 10 requests for top IPs.
 - `--filter-ip`: Filter results by IP address.
-- `--refresh`: Refresh interval for console updates in seconds (default: `5`).
 
 ### Example
 
@@ -56,6 +54,16 @@ If the `--regex` parameter points to a file, the regular expression will be read
 cargo run -- --file "/path/to/access.log" --regex "/path/to/regex.txt" --top 20
 ```
 
+## Hotkeys
+
+- `q`: Quit the application.
+- `t`: Toggle between different tabs (Overview, Last Requests, Detailed Requests).
+- `Up Arrow`: Scroll up.
+- `Down Arrow`: Scroll down.
+- `Left Arrow`: Scroll left.
+- `Right Arrow`: Scroll right.
+- `Ctrl+C`: Quit the application.
+
 ## Installation
 
 ### Downloading from Releases
@@ -82,29 +90,32 @@ After downloading and making the file executable, you can run it from anywhere w
 logutil --file "/path/to/access.log" --count=-1 --top 20
 ```
 
-
 ### Building from Source
 
-0. Rust installed on your system.
+Ensure you have Rust installed on your system. You can install Rust using the following command:
 
-[install](https://www.rust-lang.org/tools/install) 
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 1. Clone the repository:
- ```sh
- git clone https://github.com/yourusername/log-analyzer.git
- cd log-analyzer
-    ```
+
+```sh
+git clone https://github.com/yourusername/log-analyzer.git
+cd log-analyzer
+```
 
 2. Build the project:
- ```sh
- cargo build --release
- ```
+
+```sh
+cargo build --release
+```
 
 3. Run the project:
- ```sh
- cargo run -- --file "/path/to/access.log" --count=-1 --top 20
- ```
 
+```sh
+cargo run -- --file "/path/to/access.log" --count=-1 --top 20
+```
 
 ## GitHub Actions
 
@@ -156,53 +167,55 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 Below are 10 different example regular expressions for parsing logs from various systems:
 
 1. **Nginx Access Log (default)**
-    ```regex
-    ^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*
-    ```
+```regex
+^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*
+```
 
 2. **Apache Access Log**
-    ```regex
-    ^(\S+) \S+ \S+ \[.*?\] "\S+ (\S+?)(?:\?.*?)? \S+" \d+ \d+
-    ```
+```regex
+^(\S+) \S+ \S+ \[.*?\] "\S+ (\S+?)(?:\?.*?)? \S+" \d+ \d+
+```
 
 3. **Nginx Error Log**
-    ```regex
-    ^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[error\] \d+#\d+: \*.*?, client: (\S+), server: \S+, request: "\S+ \S+ \S+", host: "\S+"
-    ```
+```regex
+^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[error\] \d+#\d+: \*.*?, client: (\S+), server: \S+, request: "\S+ \S+ \S+", host: "\S+"
+```
 
 4. **Apache Error Log**
-    ```regex
-    ^\[\w+ \w+ \d+ \d{2}:\d{2}:\d{2} \d{4}\] \[error\] \[client (\S+)\] \S+:\s(\S+)
-    ```
+```regex
+^\[\w+ \w+ \d+ \d{2}:\d{2}:\d{2} \d{4}\] \[error\] \[client (\S+)\] \S+:\s(\S+)
+```
 
 5. **Systemd Journal Log**
-    ```regex
-    ^<\d+>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z \S+ \S+ \S+ \S+ - - \[ID \d+ \S+\] \S+ (\S+)$
-    ```
+```regex
+^<\d+>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z \S+ \S+ \S+ \S+ - - \[ID \d+ \S+\] \S+ (\S+)$
+```
 
 6. **MySQL General Log**
-    ```regex
-    ^(\d{6} \d{2}:\d{2}:\d{2})\t(\S+)\t(\S+)\t\S+\t(\S+)$
-    ```
+```regex
+^(\d{6} \d{2}:\d{2}:\d{2})\t(\S+)\t(\S+)\t\S+\t(\S+)$
+```
 
 7. **PostgreSQL Log**
-    ```regex
-    ^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ \S+ \S+) (\S+): \[(\d+)\-(\d+)\] \S+:\s(\S+)$
-    ```
+```regex
+^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ \S+ \S+) (\S+): \[(\d+)\-(\d+)\] \S+:\s(\S+)$
+```
 
 8. **Docker Log**
-    ```regex
-    ^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z) \S+ \S+ \[error\] (\S+) \S+: (\S+)$
-    ```
+```regex
+^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z) \S+ \S+ \[error\] (\S+) \S+: (\S+)$
+```
 
 9. **Kubernetes Log**
-    ```regex
-    ^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z) \S+ \S+ (\S+)\[\d+\]: \S+ \S+ (\S+)$
-    ```
+```regex
+^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z) \S+ \S+ (\S+)\[\d+\]: \S+ \S+ (\S+)$
+```
 
 10. **Redis Log**
-    ```regex
-    ^(\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}) \[\d+\] (\S+): \S+ (\S+)$
-    ```
+```regex
+^(\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}) \[\d+\] (\S+): \S+ (\S+)$
+```
 
 You can use any of these regular expressions with Log Util by specifying them directly or by placing them in a file and pointing the `--regex` parameter to that file.
+
+Feel free to adjust any specific parts to better fit your needs.
