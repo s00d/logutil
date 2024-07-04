@@ -73,10 +73,10 @@ async fn main() {
     tokio::spawn(async move {
         let _ = tail_file(&file_path, count, &regex_pattern, &log_data_clone, no_clear).await;
         loop {
-            tokio::select! {
-                _ = tail_file(&file_path, 0, &regex_pattern, &log_data_clone, no_clear) => {},
-                _ = sleep(Duration::from_secs(1)) => {},
+            if let Err(e) = tail_file(&file_path, 0, &regex_pattern, &log_data_clone, no_clear).await {
+                eprintln!("Error reading file: {:?}", e);
             }
+            sleep(Duration::from_secs(1)).await;
         }
     });
 
