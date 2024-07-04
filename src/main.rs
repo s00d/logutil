@@ -235,6 +235,31 @@ async fn tail_file(
         reader.seek(SeekFrom::End(0))?;
     }
 
+    let re = Regex::new(regex_pattern).unwrap();
+
+    loop {
+        let mut line = String::new();
+        let len = reader.read_line(&mut line)?;
+
+        if len == 0 {
+            break;
+        }
+
+        // println!("Read line: {}", line);  // Отладочное сообщение
+
+        if let Some(caps) = re.captures(&line) {
+            let ip = caps.get(1).map_or("", |m| m.as_str()).to_string();
+            let url = caps.get(2).map_or("", |m| m.as_str()).to_string();
+
+            // println!("Captured IP: {}, URL: {}", ip, url);  // Отладочное сообщение
+
+            let mut log_data = log_data.lock().unwrap();
+            log_data.add_entry(ip, url, line.clone(), no_clear);
+        } else {
+            println!("No match for line: {}", line);  // Отладочное сообщение
+        }
+    }
+
     Ok(())
 }
 
