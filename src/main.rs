@@ -451,33 +451,44 @@ impl App {
     fn draw_last_requests(&mut self, frame: &mut ratatui::terminal::Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
 
+        let mut items: Vec<Line> = vec![];
         if let Some(filter_ip) = &self.filter_ip {
             if let Some(entry) = log_data.by_ip.get(filter_ip) {
-                let last_requests = entry.last_requests.join("\n");
-                frame.render_widget(
-                    Paragraph::new(last_requests)
-                        .block(Block::default().borders(Borders::ALL).title("Last Requests")),
-                    area,
-                );
+                for request in &entry.last_requests {
+                    items.push(Line::from(request.clone()));
+                }
             }
         } else {
-            let last_requests = log_data
-                .by_ip
-                .iter()
-                .flat_map(|(ip, entry)| {
-                    entry
-                        .last_requests
-                        .iter()
-                        .map(move |request| format!("{}: {}", ip, request))
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            frame.render_widget(
-                Paragraph::new(last_requests)
-                    .block(Block::default().borders(Borders::ALL).title("Last Requests")),
-                area,
-            );
+            for (ip, entry) in &log_data.by_ip {
+                for request in &entry.last_requests {
+                    items.push(Line::from(format!("{}: {}", ip, request)));
+                }
+            }
         }
+
+        let paragraph = Paragraph::new(items.clone())
+            .scroll((self.vertical_scroll as u16, self.horizontal_scroll as u16))
+            .block(Block::default().borders(Borders::RIGHT));
+
+        let vertical_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+        let mut vertical_scrollbar_state = ScrollbarState::new(items.len()).position(self.vertical_scroll);
+
+        let horizontal_scrollbar = Scrollbar::new(ScrollbarOrientation::HorizontalBottom)
+            .begin_symbol(Some("←"))
+            .end_symbol(Some("→"));
+        let max_line_length = items.iter().map(|line| line.width()).max().unwrap_or(0);
+        let mut horizontal_scrollbar_state = ScrollbarState::new(max_line_length).position(self.horizontal_scroll);
+
+        let paragraph_area = area.inner(Margin {
+            vertical: 1,
+            horizontal: 0,
+        });
+
+        frame.render_widget(paragraph, area);
+        frame.render_stateful_widget(vertical_scrollbar, paragraph_area, &mut vertical_scrollbar_state);
+        frame.render_stateful_widget(horizontal_scrollbar, paragraph_area, &mut horizontal_scrollbar_state);
     }
 
 
