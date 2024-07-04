@@ -28,7 +28,7 @@ struct Cli {
     #[structopt(short = "c", long, default_value = "0")]
     last: usize,
 
-    /// Number of lines to read from the end of the file in 'new' mode
+    /// Refresh interval for console updates in seconds
     #[structopt(long, default_value = "5")]
     refresh: u64,
 

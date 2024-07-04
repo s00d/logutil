@@ -26,7 +26,7 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 - `--no-clear`: Disable automatic cleanup of outdated entries.
 - `--show-last-requests`: Display the last 10 requests for top IPs.
 - `--filter-ip`: Filter results by IP address.
-
+- `--refresh`: Refresh interval for console updates in seconds (default: `5`).
 
 ### Example
 
