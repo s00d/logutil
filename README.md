@@ -58,27 +58,53 @@ cargo run -- --file "/path/to/access.log" --regex "/path/to/regex.txt" --top 20
 
 ## Installation
 
-### Prerequisites
+### Downloading from Releases
 
-- [Rust](https://www.rust-lang.org/tools/install) installed on your system.
+You can download the pre-built binaries from the latest GitHub release using `curl`. Here is an example of how to download, make the file executable, and move it to a directory in your `PATH`:
+
+For `x86_64` architecture:
+
+```sh
+curl -L -o /usr/local/bin/logutil https://github.com/s00d/logutil/releases/latest/download/logutil-x86_64-unknown-linux-gnu
+chmod +x /usr/local/bin/logutil
+```
+
+For `aarch64` architecture:
+
+```sh
+curl -L -o /usr/local/bin/logutil https://github.com/s00d/logutil/releases/latest/download/logutil-aarch64-unknown-linux-gnu
+chmod +x /usr/local/bin/logutil
+```
+
+After downloading and making the file executable, you can run it from anywhere with:
+
+```sh
+logutil --file "/path/to/access.log" --count=-1 --top 20
+```
+
 
 ### Building from Source
 
+0. Rust installed on your system.
+
+[install](https://www.rust-lang.org/tools/install) 
+
 1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/log-analyzer.git
-    cd log-analyzer
+ ```sh
+ git clone https://github.com/yourusername/log-analyzer.git
+ cd log-analyzer
     ```
 
 2. Build the project:
-    ```sh
-    cargo build --release
-    ```
+ ```sh
+ cargo build --release
+ ```
 
 3. Run the project:
-    ```sh
-    cargo run -- --file "/path/to/access.log" --count=-1 --top 20
-    ```
+ ```sh
+ cargo run -- --file "/path/to/access.log" --count=-1 --top 20
+ ```
+
 
 ## GitHub Actions
 
