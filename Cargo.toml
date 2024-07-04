@@ -1,15 +1,17 @@
 [package]
 name = "logutil"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 regex = "1"
 structopt = "0.3"
-log = "0.4.21"
+log = "0.4.22"
 crossterm = "0.27"
 prettytable = "0.10.0"
+chrono = "0.4.38"
+rdev = "0.5.3"
 
 [profile.release]
 opt-level = "z" # Оптимизация для размера
