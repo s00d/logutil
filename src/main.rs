@@ -1,15 +1,19 @@
 use chrono::Local;
+use crossterm::{
+    cursor, execute, style::Print, terminal::{Clear, ClearType}, ExecutableCommand,
+};
 use prettytable::{format, row, Attr, Cell, Row, Table};
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use structopt::StructOpt;
+use tokio::signal;
 use tokio::time::sleep;
 
 #[derive(StructOpt)]
@@ -54,7 +58,6 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
-
     if let Err(e) = env::set_current_dir(env::current_dir().expect("Failed to get current directory")) {
         eprintln!("Failed to set current directory: {:?}", e);
     }
@@ -76,6 +79,13 @@ async fn main() {
     let log_data = Arc::new(Mutex::new(LogData::new()));
     let log_data_clone = Arc::clone(&log_data);
 
+    // Перехват сигнала Ctrl+C
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        signal::ctrl_c().await.unwrap();
+        tx.send(()).await.unwrap();
+    });
+
     tokio::spawn(async move {
         let _ = tail_file(&file_path, count, &regex_pattern, &log_data_clone, no_clear).await;
         loop {
@@ -87,8 +97,15 @@ async fn main() {
     });
 
     loop {
-        print_stats(&log_data, top_n, show_last_requests, filter_ip.as_deref()).await;
-        sleep(Duration::from_secs(refresh)).await;
+        if let Err(e) = print_stats(&log_data, top_n, show_last_requests, filter_ip.as_deref()).await {
+            eprintln!("Error printing stats: {:?}", e);
+        }
+        tokio::select! {
+            _ = sleep(Duration::from_secs(refresh)) => {},
+            _ = rx.recv() => {
+                break;
+            }
+        }
     }
 }
 
@@ -154,8 +171,7 @@ impl LogData {
     fn clear_outdated_entries(&mut self) {
         let threshold = SystemTime::now() - Duration::from_secs(1200); // 20 минут
         self.by_ip.retain(|_, entry| entry.last_update >= threshold);
-        self.by_url
-            .retain(|_, entry| entry.last_update >= threshold);
+        self.by_url.retain(|_, entry| entry.last_update >= threshold);
     }
 
     fn get_top_n(&self, n: usize) -> (Vec<(String, usize)>, Vec<(String, usize)>) {
@@ -251,18 +267,14 @@ async fn tail_file(
             break;
         }
 
-        // println!("Read line: {}", line);  // Отладочное сообщение
-
         if let Some(caps) = re.captures(&line) {
             let ip = caps.get(1).map_or("", |m| m.as_str()).to_string();
             let url = caps.get(2).map_or("", |m| m.as_str()).to_string();
 
-            // println!("Captured IP: {}, URL: {}", ip, url);  // Отладочное сообщение
-
             let mut log_data = log_data.lock().unwrap();
             log_data.add_entry(ip, url, line.clone(), no_clear);
         } else {
-            println!("No match for line: {}", line);  // Отладочное сообщение
+            println!("No match for line: {}", line);
         }
     }
 
@@ -294,12 +306,9 @@ async fn print_stats(
     top_n: usize,
     show_last_requests: bool,
     filter_ip: Option<&str>,
-) {
-    if cfg!(target_os = "windows") {
-        Command::new("cls").status().unwrap();
-    } else {
-        Command::new("clear").status().unwrap();
-    }
+) -> std::io::Result<()> {
+    let mut stdout = std::io::stdout();
+    execute!(stdout, cursor::MoveTo(0, 0), Clear(ClearType::FromCursorDown))?;
 
     let log_data = log_data.lock().unwrap();
     let (top_ips, top_urls) = log_data.get_top_n(top_n);
@@ -323,8 +332,11 @@ async fn print_stats(
         Cell::new(""),
     ]));
 
-    table.printstd();
-    println!("");
+    let mut buffer = Vec::new();
+    table.print(&mut buffer).unwrap();
+    stdout.write_all(&buffer)?;
+
+    writeln!(stdout)?;
 
     let mut ip_table = Table::new();
     ip_table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
@@ -337,9 +349,9 @@ async fn print_stats(
         if let Some(entry) = log_data.by_ip.get(filter_ip) {
             ip_table.add_row(row![filter_ip, entry.count.to_string()]);
             if show_last_requests {
-                println!("\nLast requests for IP: {}", filter_ip);
+                writeln!(stdout, "\nLast requests for IP: {}", filter_ip)?;
                 for request in &entry.last_requests {
-                    println!("{}", request);
+                    writeln!(stdout, "{}", request)?;
                 }
             }
         }
@@ -349,8 +361,11 @@ async fn print_stats(
         }
     }
 
-    ip_table.printstd();
-    println!("");
+    let mut buffer = Vec::new();
+    ip_table.print(&mut buffer).unwrap();
+    stdout.write_all(&buffer)?;
+
+    writeln!(stdout)?;
 
     let mut url_table = Table::new();
     url_table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
@@ -362,18 +377,22 @@ async fn print_stats(
         url_table.add_row(row![url, count.to_string()]);
     }
 
-    url_table.printstd();
+    let mut buffer = Vec::new();
+    url_table.print(&mut buffer).unwrap();
+    stdout.write_all(&buffer)?;
 
     if show_last_requests && filter_ip.is_none() {
-        println!("");
+        writeln!(stdout)?;
         for (ip, _) in &top_ips {
             let last_requests = log_data.get_last_requests(ip);
             if !last_requests.is_empty() {
-                println!("Last requests for IP: {}", ip);
+                writeln!(stdout, "Last requests for IP: {}", ip)?;
                 for request in last_requests {
-                    println!("{}", request);
+                    writeln!(stdout, "{}", request)?;
                 }
             }
         }
     }
+
+    Ok(())
 }
