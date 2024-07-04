@@ -2,7 +2,7 @@ use chrono::Local;
 use ratatui::{
     backend::{CrosstermBackend},
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        event::{self, Event, KeyCode},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
@@ -74,9 +74,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Переходим в сырой режим и альтернативный экран
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+
+    terminal.clear()?;
 
     let file_path = args.file.clone();
     let count = args.count;
@@ -147,7 +149,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
     )?;
     terminal.show_cursor()?;
 
@@ -569,4 +570,5 @@ impl App {
     fn quit(&mut self) {
         self.should_quit = true;
     }
+
 }
