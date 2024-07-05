@@ -20,13 +20,17 @@ use tokio::time::sleep;
 const NORMAL_ROW_BG: Color = Color::Rgb(18, 18, 20);
 const SELECTED_STYLE: Style = Style::new().bg(Color::Rgb(0, 31, 63)).add_modifier(Modifier::BOLD);
 const TEXT_FG_COLOR: Color = Color::Rgb(158, 158, 158);
-
 #[derive(StructOpt)]
-#[structopt(name = "Log Analyzer", about = "A tool to analyze Nginx access logs.")]
+#[structopt(
+    name = "log Util",
+    author = "s00d",
+    about = "A tool to analyze Nginx access logs.\n\n\
+    GitHub: https://github.com/s00d/logutil"
+)]
 struct Cli {
     /// Path to the log file
     #[structopt(parse(from_os_str))]
-    file: std::path::PathBuf,
+    file: PathBuf,
 
     /// Number of lines to read from the end of the file (0 to start from the end, -1 to read the entire file)
     #[structopt(short = "c", long, default_value = "0")]
