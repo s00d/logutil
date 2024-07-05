@@ -114,6 +114,8 @@ cargo build --release
 
 ```sh
 cargo run -- "/path/to/access.log" --count=-1 --top 20
+# or nginx
+cargo run -- ./example.log --regex='^(\S+) - - \[(.*?)\]( )\"(\S+) (\S+?)(?:\?.*?)? .+' --count="-1"   
 ```
 
 ## GitHub Actions
