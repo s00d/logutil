@@ -157,7 +157,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-- [Prettytable-rs](https://crates.io/crates/prettytable-rs) for table formatting.
 - [Regex](https://crates.io/crates/regex) for regular expression parsing.
 - [Structopt](https://crates.io/crates/structopt) for command-line argument parsing.
 - [Tokio](https://crates.io/crates/tokio) for asynchronous runtime support.
