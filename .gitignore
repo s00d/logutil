@@ -1,3 +1,5 @@
 /target
 access.log
 .github_token
+example.log
+logger.js

@@ -1,8 +1,8 @@
-I apologize for the oversight. Here's the updated README reflecting the current state of the code and including the hotkeys:
-
 # Log Util
 
 Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads log files, extracts and counts requests by IP addresses and URLs, and displays the top IP addresses and URLs. The tool can handle large log files by reading only new data as it is appended, or by processing the entire file from the beginning.
+
+![Log Util in action](https://github.com/s00d/logutil/blob/main/img.gif?raw=true)
 
 ## Features
 
@@ -18,32 +18,31 @@ Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads lo
 ## Usage
 
 ### Command-line Options
-
-- `--file`: Path to the log file (default: `access.log`).
+- `file`: Path to the log file.
 - `--count`: Number of lines to read from the end of the file (`0` to start from the end, `-1` to read the entire file; default: `0`).
-- `--regex`: Regular expression to parse the log entries or path to a file containing the regex (default: `^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*`).
+- `--regex`: Regular expression to parse the log entries or path to a file containing the regex (default: `^(\S+) - ".+" \[(.*?)\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*`).
+- `--date-format`: Date format to parse the log entries (default: `%d/%b/%Y:%H:%M:%S %z`).
 - `--top`: Number of top entries to display (default: `10`).
 - `--no-clear`: Disable automatic cleanup of outdated entries.
-- `--filter-ip`: Filter results by IP address.
 
 ### Example
 
 To read the entire log file:
 
 ```sh
-cargo run -- --file "./access.log" --count=-1
+cargo run -- "./access.log" --count=-1
 ```
 
 To read the last 100 lines from the log file:
 
 ```sh
-cargo run -- --file "./access.log" --count=100
+cargo run -- "./access.log" --count=100
 ```
 
 To read new data from the end of the log file as it is appended:
 
 ```sh
-cargo run -- --file "./access.log" --count=0
+cargo run -- "./access.log" --count=0
 ```
 
 ### Loading Regular Expression from a File
@@ -51,13 +50,13 @@ cargo run -- --file "./access.log" --count=0
 If the `--regex` parameter points to a file, the regular expression will be read from that file.
 
 ```sh
-cargo run -- --file "/path/to/access.log" --regex "/path/to/regex.txt" --top 20
+cargo run -- "/path/to/access.log" --regex "/path/to/regex.txt" --top 20
 ```
 
 ## Hotkeys
 
 - `q`: Quit the application.
-- `t`: Toggle between different tabs (Overview, Last Requests, Detailed Requests).
+- `t`: Toggle between different tabs (Overview, Last Requests, Detailed Requests, Requests Chart).
 - `Up Arrow`: Scroll up.
 - `Down Arrow`: Scroll down.
 - `Left Arrow`: Scroll left.
@@ -87,7 +86,7 @@ chmod +x /usr/local/bin/logutil
 After downloading and making the file executable, you can run it from anywhere with:
 
 ```sh
-logutil --file "/path/to/access.log" --count=-1 --top 20
+logutil "/path/to/access.log" --count=-1 --top 20
 ```
 
 ### Building from Source
@@ -95,7 +94,7 @@ logutil --file "/path/to/access.log" --count=-1 --top 20
 Ensure you have Rust installed on your system. You can install Rust using the following command:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rust-lang.org | sh
 ```
 
 1. Clone the repository:
@@ -114,7 +113,7 @@ cargo build --release
 3. Run the project:
 
 ```sh
-cargo run -- --file "/path/to/access.log" --count=-1 --top 20
+cargo run -- "/path/to/access.log" --count=-1 --top 20
 ```
 
 ## GitHub Actions
@@ -162,60 +161,38 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Tokio](https://crates.io/crates/tokio) for asynchronous runtime support.
 - [Crossterm](https://crates.io/crates/crossterm) for terminal handling.
 
+
 ## Example Regular Expressions
 
 Below are 10 different example regular expressions for parsing logs from various systems:
 
 1. **Nginx Access Log (default)**
 ```regex
-^(\S+) - ".+" \[.*?\] \d+\.\d+ "\S+" "\S+ (\S+?)(?:\?.*?)? HTTP/.*
+^(\S+) - - \[(.*?)\]( )\"(\S+) (\S+?)(?:\?.*?)? .+
 ```
+- Date format: `%d/%b/%Y:%H:%M:%S %z`
 
 2. **Apache Access Log**
 ```regex
 ^(\S+) \S+ \S+ \[.*?\] "\S+ (\S+?)(?:\?.*?)? \S+" \d+ \d+
 ```
+- Date format: `%d/%b/%Y:%H:%M:%S %z`
 
 3. **Nginx Error Log**
 ```regex
 ^(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[error\] \d+#\d+: \*.*?, client: (\S+), server: \S+, request: "\S+ \S+ \S+", host: "\S+"
 ```
+- Date format: `%Y/%m/%d %H:%M:%S`
 
 4. **Apache Error Log**
 ```regex
 ^\[\w+ \w+ \d+ \d{2}:\d{2}:\d{2} \d{4}\] \[error\] \[client (\S+)\] \S+:\s(\S+)
 ```
+- Date format: `%a %b %d %H:%M:%S %Y`
 
-5. **Systemd Journal Log**
-```regex
-^<\d+>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z \S+ \S+ \S+ \S+ - - \[ID \d+ \S+\] \S+ (\S+)$
-```
-
-6. **MySQL General Log**
-```regex
-^(\d{6} \d{2}:\d{2}:\d{2})\t(\S+)\t(\S+)\t\S+\t(\S+)$
-```
-
-7. **PostgreSQL Log**
-```regex
-^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ \S+ \S+) (\S+): \[(\d+)\-(\d+)\] \S+:\s(\S+)$
-```
-
-8. **Docker Log**
-```regex
-^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z) \S+ \S+ \[error\] (\S+) \S+: (\S+)$
-```
-
-9. **Kubernetes Log**
+5. **Kubernetes Log**
 ```regex
 ^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d+Z) \S+ \S+ (\S+)\[\d+\]: \S+ \S+ (\S+)$
 ```
-
-10. **Redis Log**
-```regex
-^(\d{4}:\d{2}:\d{2} \d{2}:\d{2}:\d{2}) \[\d+\] (\S+): \S+ (\S+)$
+- Date format: `%Y-%m-%dT%H:%M:%S%.fZ`
 ```
-
-You can use any of these regular expressions with Log Util by specifying them directly or by placing them in a file and pointing the `--regex` parameter to that file.
-
-Feel free to adjust any specific parts to better fit your needs.

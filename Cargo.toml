@@ -1,6 +1,6 @@
 [package]
 name = "logutil"
-version = "0.5.3"
+version = "0.6.1"
 edition = "2021"
 
 [dependencies]
@@ -12,6 +12,7 @@ crossterm = "0.27"
 prettytable = "0.10.0"
 chrono = "0.4.38"
 ratatui = "0.27.0"
+textwrap = "0.16.1"
 
 [profile.release]
 opt-level = "z" # Оптимизация для размера
