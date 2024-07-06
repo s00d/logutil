@@ -25,9 +25,6 @@ pub async fn tail_file(
     let mut reader = BufReader::new(file);
     let mut last_processed = last_processed_line.clone();
 
-    let mut file = File::create("text.txt")?;
-    file.write_all(format!("2222, {:?}", last_processed_line).as_bytes())?;
-
     if let Some(ref last_line) = last_processed_line {
         set_reader_to_last_processed_line(&mut reader, last_line.clone(), &progress_callback, file_size).await?;
     } else if count > 0 {
