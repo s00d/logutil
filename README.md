@@ -165,8 +165,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Example Regular Expressions
 
-Below are 10 different example regular expressions for parsing logs from various systems:
-
 1. **Nginx Access Log (default)**
 ```regex
 ^(\S+) - - \[(.*?)\]( )\"(\S+) (\S+?)(?:\?.*?)? .+
