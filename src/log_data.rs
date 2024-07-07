@@ -107,7 +107,7 @@ impl LogData {
         self.by_url.retain(|_, entry| entry.last_update >= threshold);
     }
 
-    fn remove_outdated_intervals(&mut self, timestamp: i64) {
+    fn remove_outdated_intervals(&mut self, _timestamp: i64) {
         // let threshold = timestamp - (20 * 60); // 20 minutes ago
         // self.requests_per_interval.retain(|&k, _| k >= threshold);
     }
