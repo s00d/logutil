@@ -111,23 +111,12 @@ jobs:
           args: "--locked --release"
           strip: true
 
-      - name: Package as archive
-        shell: bash
-        run: |
-          cd target/${{ matrix.platform.target }}/release
-          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
-            7z a ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          else
-            tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
-          fi
-          cd -
-
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.version }}
-          name: Release v${{ env.version }}
+          name: v${{ env.version }}
           draft: true
           prerelease: false
         env:
@@ -137,5 +126,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.version }}
-          files: |
-            target/${{ matrix.platform.name }}
+          files: "target/${{ matrix.platform.name }}/release/logutil-*"
