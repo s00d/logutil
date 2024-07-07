@@ -1,19 +1,17 @@
+use std::cmp::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use chrono::{Local, Timelike, TimeZone, Utc};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::prelude::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, RenderDirection, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Sparkline, Table, Tabs};
-use ratatui::widgets::canvas::{Canvas, Rectangle};
+use ratatui::prelude::{Color, Style};
+use ratatui::widgets::{ListItem, ListState, Row};
+use ratatui::widgets::canvas::Rectangle;
 use textwrap::wrap;
-use crate::log_data::LogEntry;
-use crate::LogData;
+use crate::log_data::LogData;
+use crate::tui_manager::{TuiManager, TEXT_FG_COLOR};
 
-const NORMAL_ROW_BG: Color = Color::Rgb(18, 18, 20);
-const SELECTED_STYLE: Style = Style::new().bg(Color::Rgb(0, 31, 63)).add_modifier(Modifier::BOLD);
-const TEXT_FG_COLOR: Color = Color::Rgb(158, 158, 158);
 
 pub struct App {
     log_data: Arc<Mutex<LogData>>,
@@ -26,8 +24,8 @@ pub struct App {
     input: String,
     current_page: usize,
     total_pages: usize,
-    pages: Vec<String>,
     progress: f64,
+    tui_manager: TuiManager,
 }
 
 impl App {
@@ -43,8 +41,8 @@ impl App {
             input: String::new(),
             current_page: 0,
             total_pages: 0,
-            pages: Vec::default(),
             progress: 0.0,
+            tui_manager: TuiManager::new(),
         }
     }
 
@@ -81,7 +79,6 @@ impl App {
             .constraints([
                 Constraint::Length(3),
                 Constraint::Min(0),
-
             ].as_ref())
             .split(size);
 
@@ -90,9 +87,17 @@ impl App {
             .constraints([Constraint::Percentage(30), Constraint::Percentage(60), Constraint::Percentage(10)].as_ref())
             .split(chunks[0]);
 
-        self.draw_tabs(frame, header_chunks[0]);
-        self.draw_summary(frame, header_chunks[1]);
-        self.draw_progress_bar(frame, header_chunks[2]);
+        frame.render_widget(self.tui_manager.draw_tabs(
+            vec!["Overview".into(), "Requests".into(), "Detailed".into(), "Sparkline".into(), "Heatmap".into()],
+            self.current_tab,
+            "Tabs"
+        ), header_chunks[0]);
+
+        frame.render_widget(self.tui_manager.draw_summary(
+            &self.get_summary_text()
+        ), header_chunks[1]);
+
+        frame.render_widget(self.tui_manager.draw_progress_bar(self.progress), header_chunks[2]);
 
         match self.current_tab {
             0 => self.draw_overview(frame, chunks[1]),
@@ -104,159 +109,17 @@ impl App {
         }
     }
 
-    fn draw_progress_bar(&self, frame: &mut Frame, area: Rect) {  // добавлено
-        let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Loading Progress"))
-            .gauge_style(Style::default().fg(Color::Green).bg(Color::Black).add_modifier(Modifier::ITALIC))
-            .ratio(self.progress);
-        frame.render_widget(gauge, area);
-    }
-
-    fn draw_heatmap(&self, frame: &mut Frame, area: Rect) {
-        let log_data = self.log_data.lock().unwrap();
-        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().collect();
-        sorted_data.sort_by_key(|&(timestamp, _)| {
-            let datetime = Utc.timestamp_opt(timestamp.clone(), 0).unwrap();
-            datetime.date_naive()
-        });
-
-        let min_value = sorted_data.iter().map(|&(_, &v)| v).min().unwrap_or(0);
-        let max_value = sorted_data.iter().map(|&(_, &v)| v).max().unwrap_or(1);
-
-        let mut unique_dates: Vec<_> = sorted_data.iter()
-            .map(|&(timestamp, _)| {
-                let datetime = Utc.timestamp_opt(timestamp.clone(), 0).unwrap();
-                datetime.date_naive()
-            })
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-
-        unique_dates.sort();
-
-        // Увеличиваем размеры сетки для добавления места для подписей
-        let x_bounds = [0.0, 26.0];  // 24 часа + место для подписи
-        let y_bounds = [0.0, unique_dates.len() as f64 + 1.0];  // количество уникальных дат + место для подписи
-
-        let canvas = Canvas::default()
-            .block(Block::default().borders(Borders::ALL).title("Heatmap (hourly by date, UTC)"))
-            .x_bounds(x_bounds)  // 24 часа + подпись
-            .y_bounds(y_bounds)  // количество уникальных дат + подпись
-            .paint(move |ctx| {
-                // Добавляем подписи часов
-                for hour in 0..24 {
-                    ctx.print(
-                        hour as f64 + 2.5, // Смещаем для подписи
-                        0.0,
-                        ratatui::text::Line::from(format!("{}", hour+1)),
-                    );
-                }
-
-                // Добавляем подписи дат
-                for (index, date) in unique_dates.iter().enumerate() {
-                    ctx.print(
-                        0.5,  // Смещаем для подписи
-                        index as f64 + 1.5,
-                        ratatui::text::Line::from(date.format("%Y-%m-%d").to_string()),
-                    );
-                }
-
-                // Рисуем ячейки тепловой карты
-                for (&timestamp, &value) in sorted_data.iter() {
-                    let intensity = (value as f64 - min_value as f64) / (max_value as f64 - min_value as f64);
-                    let color = Color::Rgb(
-                        (intensity * 255.0) as u8,
-                        0,
-                        (255.0 - intensity * 255.0) as u8,
-                    );
-
-                    let datetime = Utc.timestamp_opt(timestamp, 0).unwrap().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
-                    let hour = datetime.hour() as f64;
-                    let date_index = unique_dates.iter().position(|&d| d == datetime.date_naive()).unwrap() as f64;
-
-                    ctx.draw(&Rectangle {
-                        x: hour + 1.0, // Смещаем для подписи
-                        y: date_index + 1.0,  // Смещаем для подписи
-                        width: 1.0,
-                        height: 1.0,
-                        color,
-                    });
-                }
-            });
-
-        frame.render_widget(canvas, area);
-    }
-
-
-
-    fn draw_requests_sparkline(&mut self, frame: &mut Frame, area: Rect) {
-        let log_data = self.log_data.lock().unwrap();
-        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().collect();
-        sorted_data.sort_by_key(|&(k, _)| k);
-        sorted_data.reverse();
-
-        let mut data: Vec<u64> = sorted_data.iter().map(|&(_, v)| *v as u64).collect();
-        if data.len() > area.width as usize {
-            data.truncate(area.width as usize);
-        }
-
-        if data.is_empty() {
-            return;
-        }
-
-        let min_value = data.iter().min().unwrap_or(&0);
-        let max_value = data.iter().max().unwrap_or(&0);
-        let start_time = sorted_data.last().map(|(&k, _)| k).unwrap_or(0);
-        let end_time = sorted_data.first().map(|(&k, _)| k).unwrap_or(0);
-
-        let sparkline_title = format!(
-            "Requests over last 20 minutes (Min: {}, Max: {}, Start: {}, End: {})",
-            min_value,
-            max_value,
-            start_time,
-            end_time
-        );
-
-        let sparkline = Sparkline::default()
-            .block(Block::default().borders(Borders::ALL).title(sparkline_title))
-            .data(&data)
-            .direction(RenderDirection::RightToLeft)
-            .style(Style::default().fg(Color::Cyan));
-
-        frame.render_widget(sparkline, area);
-    }
-
-    fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
-        let titles: Vec<String> = ["Overview", "Requests", "Detailed", "Sparkline", "Heatmap"]
-            .iter()
-            .cloned()
-            .map(|t| t.into())
-            .collect();
-        let tabs = Tabs::new(titles)
-            .select(self.current_tab)
-            .block(Block::default().borders(Borders::ALL).title("Tabs"))
-            .highlight_style(Style::default().fg(Color::Yellow))
-            .divider("|");
-        frame.render_widget(tabs, area);
-    }
-
-    fn draw_summary(&self, frame: &mut Frame, area: Rect) {
+    fn get_summary_text(&self) -> String {
         let log_data = self.log_data.lock().unwrap();
         let (unique_ips, unique_urls) = log_data.get_unique_counts();
-
         let now = Local::now();
-        let summary = format!(
+        format!(
             "Requests: {} | Unique IPs: {} | Unique URLs: {} | Update: {}",
             log_data.total_requests, unique_ips, unique_urls, now.format("%Y-%m-%d %H:%M:%S")
-        );
-
-        frame.render_widget(
-            Paragraph::new(summary).block(Block::default().borders(Borders::ALL).title("Summary")),
-            area,
-        );
+        )
     }
 
-    fn draw_overview(&mut self, frame: &mut ratatui::terminal::Frame, area: Rect) {
+    fn draw_overview(&mut self, frame: &mut Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
         let (top_ips, top_urls) = log_data.get_top_n(self.top_n);
 
@@ -270,31 +133,19 @@ impl App {
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(chunks[1]);
 
-        self.draw_ip_table(frame, chunks[0], &top_ips);
-        self.draw_url_table(frame, chunks[1], &top_urls);
-    }
-
-    fn draw_ip_table(&self, frame: &mut ratatui::terminal::Frame, area: Rect, top_ips: &[(String, &LogEntry)]) {
-        let ip_rows: Vec<Row> = top_ips
-            .iter()
-            .map(|(ip, entry)| {
+        frame.render_widget(self.tui_manager.draw_table(
+            top_ips.iter().map(|(ip, entry)| {
                 let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
                 let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
                 Row::new(vec![ip.clone(), entry.count.to_string(), last_update_str])
-            })
-            .collect();
+            }).collect(),
+            vec!["IP", "Requests", "Last Update"],
+            "Top IPs",
+            &[Constraint::Length(50), Constraint::Length(20), Constraint::Length(30)]
+        ), chunks[0]);
 
-        let ip_table = Table::new(ip_rows, &[Constraint::Length(50), Constraint::Length(20), Constraint::Length(30)])
-            .block(Block::default().borders(Borders::ALL).title("Top IPs"))
-            .header(Row::new(vec!["IP", "Requests", "Last Update"]).style(Style::default().fg(Color::Yellow)));
-
-        frame.render_widget(ip_table, area);
-    }
-
-    fn draw_url_table(&self, frame: &mut ratatui::terminal::Frame, area: Rect, top_urls: &[(String, &LogEntry)]) {
-        let url_rows: Vec<Row> = top_urls
-            .iter()
-            .map(|(url, entry)| {
+        frame.render_widget(self.tui_manager.draw_table(
+            top_urls.iter().map(|(url, entry)| {
                 let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
                 let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
                 Row::new(vec![
@@ -304,21 +155,17 @@ impl App {
                     entry.count.to_string(),
                     last_update_str,
                 ])
-            })
-            .collect();
-
-        let url_table = Table::new(url_rows, &[Constraint::Length(10), Constraint::Length(20), Constraint::Length(90), Constraint::Length(10), Constraint::Length(20)])
-            .block(Block::default().borders(Borders::ALL).title("Top URLs"))
-            .header(Row::new(vec!["Type", "Domain", "URL", "Requests", "Last Update"]).style(Style::default().fg(Color::Yellow)));
-
-        frame.render_widget(url_table, area);
+            }).collect(),
+            vec!["Type", "Domain", "URL", "Requests", "Last Update"],
+            "Top URLs",
+            &[Constraint::Length(10), Constraint::Length(20), Constraint::Length(90), Constraint::Length(10), Constraint::Length(20)]
+        ), chunks[1]);
     }
 
-    fn draw_last_requests(&mut self, frame: &mut ratatui::terminal::Frame, area: Rect) {
+    fn draw_last_requests(&mut self, frame: &mut Frame, area: Rect) {
         let items: Vec<ListItem>;
         let total_pages: usize;
 
-        // Create a scope to limit the lifetime of the immutable borrow
         {
             let log_data = self.log_data.lock().unwrap();
             let search_results = self.get_search_results(&log_data);
@@ -334,19 +181,27 @@ impl App {
                     ListItem::new(wrapped_text.join("\n")).style(Style::default().fg(TEXT_FG_COLOR))
                 })
                 .collect();
-        } // End of the immutable borrow scope
+        }
 
         self.total_pages = total_pages;
+        let pages: Vec<String> = (1..=self.total_pages).map(|i| format!("{}", i)).collect();
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(3)].as_ref())
+            .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
             .split(area);
 
-        // Mutable borrows only occur after the immutable borrows are out of scope
-        self.draw_input(frame, chunks[0]);
-        self.draw_list(frame, chunks[1], items);
-        self.draw_pagination(frame, chunks[2]);
+        let header_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(chunks[0]);
+
+
+        frame.render_widget(self.tui_manager.draw_input(&self.input), header_chunks[0]);
+        frame.render_widget(self.tui_manager.draw_pagination(pages.clone(), self.current_page), header_chunks[1]);
+
+        frame.render_stateful_widget(self.tui_manager.draw_list(items.clone()), chunks[1], &mut self.last_requests_state);
+        self.tui_manager.draw_scrollbar(items.len(), self.last_requests_state.selected().unwrap_or(0), frame, chunks[1]);
     }
 
     fn get_search_results<'a>(&self, log_data: &'a LogData) -> Vec<&'a String> {
@@ -366,40 +221,22 @@ impl App {
         }
     }
 
-    fn draw_input(&self, frame: &mut Frame, area: Rect) {
-        let input = Paragraph::new(self.input.as_str())
-            .style(Style::default().fg(Color::Yellow))
-            .block(Block::default().borders(Borders::ALL).title("Search"));
-        frame.render_widget(input, area);
-    }
-
-    fn draw_list(&mut self, frame: &mut Frame, area: Rect, items: Vec<ListItem>) {
-        let count = items.len();
-        let list = List::new(items)
-            .block(Block::default().borders(Borders::ALL).style(Style::default().bg(NORMAL_ROW_BG)))
-            .highlight_style(SELECTED_STYLE)
-            .highlight_symbol(">");
-        frame.render_stateful_widget(list, area, &mut self.last_requests_state);
-
-        let selected_index = self.last_requests_state.selected().unwrap_or(0);
-        self.draw_scrollbar(count, selected_index, frame, area);
-    }
-
-    fn draw_pagination(&mut self, frame: &mut ratatui::terminal::Frame, area: Rect) {
-        self.pages = (1..=self.total_pages).map(|i| format!("{}", i)).collect();
-        let page_titles = self.pages.iter().cloned().collect::<Vec<_>>();
-        let pagination_tabs = Tabs::new(page_titles)
-            .select(self.current_page)
-            .block(Block::default().borders(Borders::ALL).title("Pages"))
-            .highlight_style(Style::default().fg(Color::Yellow))
-            .divider("|");
-        frame.render_widget(pagination_tabs, area);
-    }
-
-    fn draw_detailed_requests(&mut self, frame: &mut ratatui::terminal::Frame, area: Rect) {
+    fn draw_detailed_requests(&mut self, frame: &mut Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
+        let mut top_ips = log_data.get_top_n(self.top_n).0;
 
-        let top_ips = log_data.get_top_n(self.top_n).0;
+        top_ips.sort_by(|a, b| {
+            let ip_a: Vec<u8> = a.0.split('.').map(|s| s.parse().unwrap()).collect();
+            let ip_b: Vec<u8> = b.0.split('.').map(|s| s.parse().unwrap()).collect();
+            for i in 0..4 {
+                match ip_a[i].cmp(&ip_b[i]) {
+                    Ordering::Equal => continue,
+                    other => return other,
+                }
+            }
+            Ordering::Equal
+        });
+
         let ip_items: Vec<ListItem> = top_ips
             .iter()
             .map(|(ip, _)| ListItem::new(ip.clone()).style(Style::default().fg(Color::Yellow)))
@@ -422,41 +259,108 @@ impl App {
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(area);
 
-        let count = ip_items.len();
-        let ip_list = List::new(ip_items)
-            .block(Block::default().borders(Borders::ALL).title("IP Addresses").style(Style::default().bg(NORMAL_ROW_BG)))
-            .highlight_style(SELECTED_STYLE)
-            .highlight_symbol("> ");
-        frame.render_stateful_widget(ip_list, chunks[0], &mut self.ip_list_state);
+        frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone()), chunks[0], &mut self.ip_list_state);
+        self.tui_manager.draw_scrollbar(ip_items.len(), self.ip_list_state.selected().unwrap_or(0), frame, chunks[0]);
 
-        let selected_index = self.ip_list_state.selected().unwrap_or(0);
-        self.draw_scrollbar(count, selected_index, frame, chunks[0]);
-
-        let count = request_items.len();
-        let request_list = List::new(request_items)
-            .block(Block::default().borders(Borders::ALL).title("Requests").style(Style::default().bg(NORMAL_ROW_BG)))
-            .highlight_style(SELECTED_STYLE);
-        frame.render_stateful_widget(request_list, chunks[1], &mut self.request_list_state);
-
-        let selected_index = self.request_list_state.selected().unwrap_or(0);
-        self.draw_scrollbar(count, selected_index, frame, chunks[1]);
+        frame.render_stateful_widget(self.tui_manager.draw_list(request_items.clone()), chunks[1], &mut self.request_list_state);
+        self.tui_manager.draw_scrollbar(request_items.len(), self.request_list_state.selected().unwrap_or(0), frame, chunks[1]);
 
         if self.ip_list_state.selected().is_none() {
             self.ip_list_state.select(Some(0));
         }
     }
 
-    fn draw_scrollbar(&self, count: usize, selected_index: usize, frame: &mut Frame, rect: Rect) {
-        let mut scrollbar_state = ScrollbarState::default()
-            .content_length(count)
-            .position(selected_index);
-        frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("↑"))
-                .end_symbol(Some("↓")),
-            rect,
-            &mut scrollbar_state,
+    fn draw_requests_sparkline(&mut self, frame: &mut Frame, area: Rect) {
+        let log_data = self.log_data.lock().unwrap();
+        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().map(|(&k, &v)| (k, v as u64)).collect();
+        sorted_data.sort_by_key(|&(k, _)| k);
+        sorted_data.reverse();
+
+        let mut data: Vec<u64> = sorted_data.iter().map(|&(_, v)| v).collect();
+        if data.len() > area.width as usize {
+            data.truncate(area.width as usize);
+        }
+
+        if data.is_empty() {
+            return;
+        }
+
+        let (min_value, max_value, start_time, end_time) = self.get_sparkline_bounds(&data, &sorted_data);
+
+        let sparkline_title = format!(
+            "Requests over last 20 minutes (Min: {}, Max: {}, Start: {}, End: {})",
+            min_value,
+            max_value,
+            start_time,
+            end_time
         );
+
+        frame.render_widget(self.tui_manager.draw_sparkline(&data, &sparkline_title), area);
+    }
+
+    fn get_sparkline_bounds(&self, data: &[u64], sorted_data: &[(i64, u64)]) -> (u64, u64, i64, i64) {
+        let min_value = *data.iter().min().unwrap_or(&0);
+        let max_value = *data.iter().max().unwrap_or(&0);
+        let start_time = sorted_data.last().map(|&(k, _)| k).unwrap_or(0);
+        let end_time = sorted_data.first().map(|&(k, _)| k).unwrap_or(0);
+        (min_value, max_value, start_time, end_time)
+    }
+
+    fn draw_heatmap(&mut self, frame: &mut Frame, area: Rect) {
+        let log_data = self.log_data.lock().unwrap();
+        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().map(|(&k, &v)| (k, v as u64)).collect();
+        sorted_data.sort_by_key(|&(timestamp, _)| {
+            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
+            datetime.date_naive()
+        });
+
+        let min_value = sorted_data.iter().map(|&(_, v)| v).min().unwrap_or(0);
+        let max_value = sorted_data.iter().map(|&(_, v)| v).max().unwrap_or(1);
+
+        let mut unique_dates: Vec<_> = sorted_data.iter()
+            .map(|&(timestamp, _)| {
+                let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
+                datetime.date_naive()
+            })
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        unique_dates.sort();
+
+        let cells = self.generate_heatmap_cells(&sorted_data, min_value, max_value, &unique_dates);
+
+        let x_labels: Vec<(f64, String)> = (0..24).map(|hour| (hour as f64 + 1.7, format!("{}", hour))).collect();
+        let y_labels: Vec<(f64, String)> = unique_dates.iter().enumerate().map(|(index, date)| (index as f64 + 1.0, date.format("%Y-%m-%d").to_string())).collect();
+
+        frame.render_widget(self.tui_manager.draw_heatmap(cells, x_labels, y_labels), area);
+    }
+
+    fn generate_heatmap_cells(&self, sorted_data: &[(i64, u64)], min_value: u64, max_value: u64, unique_dates: &[chrono::NaiveDate]) -> Vec<Rectangle> {
+        let mut cells = Vec::new();
+
+        for &(timestamp, value) in sorted_data.iter() {
+            let intensity = (value as f64 - min_value as f64) / (max_value as f64 - min_value as f64);
+            let color = Color::Rgb(
+                (intensity * 255.0) as u8,
+                0,
+                (255.0 - intensity * 255.0) as u8,
+            );
+
+            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+            let hour = datetime.hour() as f64;
+            let date_index = unique_dates.iter().position(|&d| d == datetime.date_naive()).unwrap() as f64;
+
+            cells.push(Rectangle {
+                x: hour + 1.3,
+                y: date_index + 0.9,
+                width: 0.8,
+                height: 0.75,
+                color,
+            });
+        }
+
+        cells
     }
 
     fn on_up(&mut self) {
@@ -531,4 +435,3 @@ impl App {
         self.should_quit = true;
     }
 }
-

@@ -1,6 +1,7 @@
 mod app;
 mod log_data;
 mod helpers;
+mod tui_manager;
 
 use ratatui::{backend::{CrosstermBackend}, crossterm::{
     event::{self, Event},
