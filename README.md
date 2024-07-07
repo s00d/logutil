@@ -169,7 +169,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ```regex
 ^(\S+) - - \[(.*?)\]( )\"(\S+) (\S+?)(?:\?.*?)? .+
 ```
-- Date format: `%d/%b/%Y:%H:%M:%S %z`
+- Date format: `%Y-%m-%d %H:%M:%S %z`
 
 2. **Apache Access Log**
 ```regex

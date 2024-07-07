@@ -50,6 +50,7 @@ impl LogData {
         *self.requests_per_interval.entry(timestamp).or_insert(0) += 1;
 
         self.remove_outdated_intervals(timestamp);
+
     }
 
     fn update_ip_entry(
@@ -107,8 +108,8 @@ impl LogData {
     }
 
     fn remove_outdated_intervals(&mut self, timestamp: i64) {
-        let threshold = timestamp - (20 * 60); // 20 minutes ago
-        self.requests_per_interval.retain(|&k, _| k >= threshold);
+        // let threshold = timestamp - (20 * 60); // 20 minutes ago
+        // self.requests_per_interval.retain(|&k, _| k >= threshold);
     }
 
     pub(crate) fn get_top_n(&self, n: usize) -> (Vec<(String, &LogEntry)>, Vec<(String, &LogEntry)>) {

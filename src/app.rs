@@ -1,11 +1,12 @@
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
-use chrono::{Local, TimeZone};
+use chrono::{Local, Timelike, TimeZone, Utc};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, RenderDirection, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Sparkline, Table, Tabs};
+use ratatui::widgets::canvas::{Canvas, Rectangle};
 use textwrap::wrap;
 use crate::log_data::LogEntry;
 use crate::LogData;
@@ -26,7 +27,7 @@ pub struct App {
     current_page: usize,
     total_pages: usize,
     pages: Vec<String>,
-    pub(crate) progress: f64,
+    progress: f64,
 }
 
 impl App {
@@ -45,6 +46,10 @@ impl App {
             pages: Vec::default(),
             progress: 0.0,
         }
+    }
+
+    pub(crate) fn set_progress(&mut self, progress: f64) {
+        self.progress = progress.clamp(0.0, 100.0);
     }
 
     pub(crate) fn handle_input(&mut self, key: KeyCode, modifiers: KeyModifiers) {
@@ -68,7 +73,7 @@ impl App {
         }
     }
 
-    pub(crate) fn draw(&mut self, frame: &mut ratatui::terminal::Frame) {
+    pub(crate) fn draw(&mut self, frame: &mut Frame) {
         let size = frame.size();
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -76,28 +81,27 @@ impl App {
             .constraints([
                 Constraint::Length(3),
                 Constraint::Min(0),
-                Constraint::Length(3) // добавлено для прогресс-бара
 
             ].as_ref())
             .split(size);
 
         let header_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(35), Constraint::Percentage(65)].as_ref())
+            .constraints([Constraint::Percentage(30), Constraint::Percentage(60), Constraint::Percentage(10)].as_ref())
             .split(chunks[0]);
 
         self.draw_tabs(frame, header_chunks[0]);
         self.draw_summary(frame, header_chunks[1]);
+        self.draw_progress_bar(frame, header_chunks[2]);
 
         match self.current_tab {
             0 => self.draw_overview(frame, chunks[1]),
             1 => self.draw_last_requests(frame, chunks[1]),
             2 => self.draw_detailed_requests(frame, chunks[1]),
-            3 => self.draw_requests_chart(frame, chunks[1]),
+            3 => self.draw_requests_sparkline(frame, chunks[1]),
+            4 => self.draw_heatmap(frame, chunks[1]),
             _ => {}
         }
-
-        self.draw_progress_bar(frame, chunks[2]);
     }
 
     fn draw_progress_bar(&self, frame: &mut Frame, area: Rect) {  // добавлено
@@ -108,7 +112,84 @@ impl App {
         frame.render_widget(gauge, area);
     }
 
-    fn draw_requests_chart(&mut self, frame: &mut ratatui::terminal::Frame, area: Rect) {
+    fn draw_heatmap(&self, frame: &mut Frame, area: Rect) {
+        let log_data = self.log_data.lock().unwrap();
+        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().collect();
+        sorted_data.sort_by_key(|&(timestamp, _)| {
+            let datetime = Utc.timestamp_opt(timestamp.clone(), 0).unwrap();
+            datetime.date_naive()
+        });
+
+        let min_value = sorted_data.iter().map(|&(_, &v)| v).min().unwrap_or(0);
+        let max_value = sorted_data.iter().map(|&(_, &v)| v).max().unwrap_or(1);
+
+        let mut unique_dates: Vec<_> = sorted_data.iter()
+            .map(|&(timestamp, _)| {
+                let datetime = Utc.timestamp_opt(timestamp.clone(), 0).unwrap();
+                datetime.date_naive()
+            })
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+
+        unique_dates.sort();
+
+        // Увеличиваем размеры сетки для добавления места для подписей
+        let x_bounds = [0.0, 26.0];  // 24 часа + место для подписи
+        let y_bounds = [0.0, unique_dates.len() as f64 + 1.0];  // количество уникальных дат + место для подписи
+
+        let canvas = Canvas::default()
+            .block(Block::default().borders(Borders::ALL).title("Heatmap (hourly by date, UTC)"))
+            .x_bounds(x_bounds)  // 24 часа + подпись
+            .y_bounds(y_bounds)  // количество уникальных дат + подпись
+            .paint(move |ctx| {
+                // Добавляем подписи часов
+                for hour in 0..24 {
+                    ctx.print(
+                        hour as f64 + 2.5, // Смещаем для подписи
+                        0.0,
+                        ratatui::text::Line::from(format!("{}", hour+1)),
+                    );
+                }
+
+                // Добавляем подписи дат
+                for (index, date) in unique_dates.iter().enumerate() {
+                    ctx.print(
+                        0.5,  // Смещаем для подписи
+                        index as f64 + 1.5,
+                        ratatui::text::Line::from(date.format("%Y-%m-%d").to_string()),
+                    );
+                }
+
+                // Рисуем ячейки тепловой карты
+                for (&timestamp, &value) in sorted_data.iter() {
+                    let intensity = (value as f64 - min_value as f64) / (max_value as f64 - min_value as f64);
+                    let color = Color::Rgb(
+                        (intensity * 255.0) as u8,
+                        0,
+                        (255.0 - intensity * 255.0) as u8,
+                    );
+
+                    let datetime = Utc.timestamp_opt(timestamp, 0).unwrap().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+                    let hour = datetime.hour() as f64;
+                    let date_index = unique_dates.iter().position(|&d| d == datetime.date_naive()).unwrap() as f64;
+
+                    ctx.draw(&Rectangle {
+                        x: hour + 1.0, // Смещаем для подписи
+                        y: date_index + 1.0,  // Смещаем для подписи
+                        width: 1.0,
+                        height: 1.0,
+                        color,
+                    });
+                }
+            });
+
+        frame.render_widget(canvas, area);
+    }
+
+
+
+    fn draw_requests_sparkline(&mut self, frame: &mut Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
         let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().collect();
         sorted_data.sort_by_key(|&(k, _)| k);
@@ -145,8 +226,8 @@ impl App {
         frame.render_widget(sparkline, area);
     }
 
-    fn draw_tabs(&self, frame: &mut ratatui::terminal::Frame, area: Rect) {
-        let titles: Vec<String> = ["Overview", "Last Requests", "Detailed Requests", "Requests Chart"]
+    fn draw_tabs(&self, frame: &mut Frame, area: Rect) {
+        let titles: Vec<String> = ["Overview", "Requests", "Detailed", "Sparkline", "Heatmap"]
             .iter()
             .cloned()
             .map(|t| t.into())
@@ -159,13 +240,13 @@ impl App {
         frame.render_widget(tabs, area);
     }
 
-    fn draw_summary(&self, frame: &mut ratatui::terminal::Frame, area: Rect) {
+    fn draw_summary(&self, frame: &mut Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
         let (unique_ips, unique_urls) = log_data.get_unique_counts();
 
         let now = Local::now();
         let summary = format!(
-            "Total requests: {} | Unique IPs: {} | Unique URLs: {} | Last update: {}",
+            "Requests: {} | Unique IPs: {} | Unique URLs: {} | Update: {}",
             log_data.total_requests, unique_ips, unique_urls, now.format("%Y-%m-%d %H:%M:%S")
         );
 
@@ -443,7 +524,7 @@ impl App {
     }
 
     fn toggle_tab(&mut self) {
-        self.current_tab = (self.current_tab + 1) % 4;
+        self.current_tab = (self.current_tab + 1) % 5;
     }
 
     fn quit(&mut self) {

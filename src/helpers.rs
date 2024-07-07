@@ -1,8 +1,9 @@
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use chrono::{DateTime, FixedOffset, Offset, Utc};
+use log::error;
 use regex::Regex;
 use crate::log_data::LogData;
 
@@ -170,7 +171,7 @@ pub async fn process_line(
         let mut log_data = log_data.lock().unwrap();
         log_data.add_entry(ip, url, line.to_string(), datetime.timestamp(), request_type, request_domain, no_clear);
     } else {
-        eprintln!("No match for line: {}", line);
+        error!("No match for line: {}", line);
     }
 
     Ok(())
@@ -188,7 +189,7 @@ fn extract_captures(caps: &regex::Captures) -> (String, String, String, String, 
 
 fn parse_datetime(datetime_str: &str, date_format: &str) -> DateTime<FixedOffset> {
     DateTime::parse_from_str(&datetime_str, date_format)
-        .or_else(|_| DateTime::parse_from_str(&datetime_str, "%d/%b/%Y:%H:%M:%S")
+        .or_else(|_| DateTime::parse_from_str(&datetime_str, "%d/%b/%Y:%H:%M %S")
             .map(|dt| dt.with_timezone(&Utc.fix()))
             .map_err(|_: chrono::ParseError| ())
         )

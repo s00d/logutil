@@ -9,10 +9,12 @@ use ratatui::{backend::{CrosstermBackend}, crossterm::{
 }, terminal::Terminal};
 
 use std::env;
-use std::fs::{self};
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, mpsc, Mutex};
 use std::time::{Duration};
+use env_logger::Builder;
+use log::{error, LevelFilter};
 use structopt::StructOpt;
 use tokio::time::sleep;
 use crate::app::App;
@@ -39,7 +41,7 @@ struct Cli {
     #[structopt(
         short,
         long,
-        default_value = r#"^(\S+) - ".+" \[(.*?)\] \d+\.\d+ "(\S+)" "(\S+) (\S+?)(?:\?.*?)?""#
+        default_value = r#"^(\S+) - ".+" \[(.*?)\] \d+\.\d+ "(\S+)" "(\S+) (\S+?)(?:\?.*?)? "#
     )]
     regex: String,
 
@@ -58,6 +60,10 @@ struct Cli {
     /// Disable clearing of outdated entries
     #[structopt(long)]
     no_clear: bool,
+
+    /// Enable logging to a file
+    #[structopt(long)]
+    log_to_file: bool,
 }
 
 #[tokio::main]
@@ -69,8 +75,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Err(e) = env::set_current_dir(env::current_dir().expect("Failed to get current directory")) {
-        eprintln!("Failed to set current directory: {:?}", e);
+        error!("Failed to set current directory: {:?}", e);
     }
+
+    if args.log_to_file {
+        let log_file = File::create("app.log").expect("Unable to create log file");
+        Builder::new()
+            .filter(None, LevelFilter::Info)
+            .write_style(env_logger::WriteStyle::Always)
+            .target(env_logger::Target::Pipe(Box::new(log_file)))
+            .init();
+    } else {
+        env_logger::init();
+    }
+
 
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -104,13 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let app = Arc::clone(&app_clone);
             move |progress| {
                 let mut app = app.lock().unwrap();
-                if progress > 0.0 {
-                    app.progress = progress;
-                }
-                if progress < 100.0 {
-                    app.progress = progress;
-                }
-
+                app.set_progress(progress)
             }
         };
 
@@ -120,7 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 last_processed_line = last_line;
             }
             Err(e) => {
-                eprintln!("Error reading file: {:?}", e);
+                error!("Error reading file: {:?}", e);
             }
         }
 
@@ -133,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     last_processed_line = last_line;
                 }
                 Err(e) => {
-                    eprintln!("Error reading file: {:?}", e);
+                    error!("Error reading file: {:?}", e);
                 }
             }
             sleep(Duration::from_secs(1)).await;

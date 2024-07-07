@@ -1,6 +1,6 @@
 [package]
 name = "logutil"
-version = "0.7.1"
+version = "0.8.1"
 edition = "2021"
 authors = ["s00d <Virus191288@gmail.com>"]
 description = "log Util is a Rust-based tool designed to help you monitor and analyze Nginx access logs in real-time."
@@ -20,6 +20,7 @@ prettytable = "0.10.0"
 chrono = "0.4.38"
 ratatui = "0.27.0"
 textwrap = "0.16.1"
+env_logger = "0.11.3"
 
 [profile.release]
 opt-level = "z" # Оптимизация для размера
