@@ -4,3 +4,6 @@ access.log
 example.log
 logger.js
 app.log
+node_modules
+todo.md
+.idea
