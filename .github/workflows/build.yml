@@ -141,7 +141,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts
-          if [[ "${{ runner.os }}" == "windows-latest" ]]; then
+          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
             mv target/${{ matrix.platform.target }}/release/logutil.exe artifacts/logutil-${{ matrix.platform.target }}.exe
           else
             mv target/${{ matrix.platform.target }}/release/logutil artifacts/logutil-${{ matrix.platform.target }}
