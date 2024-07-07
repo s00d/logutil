@@ -1,4 +1,4 @@
-name: Rust
+name: Build and Release Log Util
 
 on:
   workflow_dispatch:
@@ -8,28 +8,65 @@ permissions:
 
 jobs:
   build:
-    services:
-      registry:
-        image: registry:2
-        ports:
-          - 5000:5000
-    runs-on: ubuntu-latest
+    name: Release - ${{ matrix.platform.release_for }}
+    runs-on: ${{ matrix.platform.os }}
+    continue-on-error: true
 
     strategy:
       matrix:
-        include:
-#          - target: x86_64-unknown-linux-gnu
-#            platform: linux/amd64
-#          - target: aarch64-unknown-linux-gnu
-#            platform: linux/arm64
-          - target: i686-unknown-linux-musl
-            platform: linux/arm64
+        platform:
+          - release_for: Linux-aarch64
+            os: ubuntu-20.04
+            target: aarch64-unknown-linux-gnu
+            bin: logutil
+            name: logutil-Linux-aarch64-gnu.tar.gz
+            command: build
+
+          - release_for: Linux-x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-gnu
+            bin: logutil
+            name: logutil-Linux-x86_64-gnu.tar.gz
+            command: build
+
+          - release_for: Linux-i686
+            os: ubuntu-20.04
+            target: i686-unknown-linux-musl
+            bin: logutil
+            name: logutil-Linux-i686-musl.tar.gz
+            command: build
+
+          - release_for: Windows-aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bin: logutil.exe
+            name: logutil-Windows-aarch64.zip
+            command: build
+
+          - release_for: Windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: logutil.exe
+            name: logutil-Windows-x86_64.zip
+            command: build
+
+          - release_for: macOS-x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: logutil
+            name: logutil-Darwin-x86_64.tar.gz
+            command: build
+
+          - release_for: macOS-aarch64
+            os: macOS-latest
+            target: aarch64-apple-darwin
+            bin: logutil
+            name: logutil-Darwin-aarch64.tar.gz
+            command: build
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: actions/cache@v4
         with:
@@ -38,55 +75,60 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
+            C:\Users\runneradmin\.cargo\registry\index\
+            C:\Users\runneradmin\.cargo\registry\cache\
+            C:\Users\runneradmin\.cargo\git\db\
             target/
-          key: ${{ runner.os }}-${{ matrix.target }}
+          key: ${{ runner.os }}-cargo-${{ matrix.platform.target }}
 
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: network=host
-
-
-      - name: Setup docker
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: true
-          tags: localhost:5000/logutil:latest
-
-      - name: Build
+      - name: Install dependencies
+        if: runner.os == 'Linux'
         run: |
-          docker run -v ~/.cargo/registry:/root/.cargo/registry -v ~/.cargo/git:/root/.cargo/git --platform ${{ matrix.platform }} --rm -v $PWD:/code localhost:5000/logutil:latest bash -c 'rustup target add ${{ matrix.target }} ; cargo build --release --target ${{ matrix.target }}'
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+          sudo ln -s /usr/bin/musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
+          sudo ln -s /usr/bin/musl-gcc /usr/local/bin/musl-gcc
 
-      - name: Rename binary
+      - name: Get version
+        if: runner.os != 'Windows'
+        id: version
+        run: echo "version=$(grep '^version =' Cargo.toml | sed 's/version = \"\(.*\)\"/\1/')" >> $GITHUB_ENV
+
+      - name: Get version (Windows)
+        if: runner.os == 'Windows'
+        id: version-win
         run: |
-          mkdir -p artifacts
-          cp target/${{ matrix.target }}/release/logutil artifacts/logutil-${{ matrix.target }}
+          $content = Get-Content -Path Cargo.toml
+          $version = $content | Select-String -Pattern '^version\s*=\s*"(.*)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+          echo "version=$version" >> $Env:GITHUB_ENV
+        shell: pwsh
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Build binary
+        uses: s00d/actions-rust-cross@v0.14
         with:
-          name: ${{ matrix.target }}-binary
-          path: artifacts/logutil-${{ matrix.target }}
+          command: ${{ matrix.platform.command }}
+          target: ${{ matrix.platform.target }}
+          args: "--locked --release"
+          strip: true
 
-      - name: Get Cargo Version
-        id: cargo_version
+      - name: Package as archive
+        shell: bash
         run: |
-          VERSION=$(grep '^version =' Cargo.toml | head -n 1 | sed 's/.*"\(.*\)".*/\1/')
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          cd target/${{ matrix.platform.target }}/release
+          if [[ "${{ matrix.platform.os }}" == "windows-latest" ]]; then
+            7z a ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
+          else
+            tar czvf ../../../${{ matrix.platform.name }} ${{ matrix.platform.bin }}
+          fi
+          cd -
 
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
-          name: Release v${{ env.VERSION }}
-          draft: false
+          tag_name: v${{ env.version }}
+          name: Release v${{ env.version }}
+          draft: true
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -94,6 +136,6 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
+          tag_name: v${{ env.version }}
           files: |
-            artifacts/logutil-${{ matrix.target }}
+            target/${{ matrix.platform.name }}
