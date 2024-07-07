@@ -55,7 +55,7 @@ struct Cli {
     date_format: String,
 
     /// Number of top entries to display
-    #[structopt(short, long, default_value = "10")]
+    #[structopt(short, long, default_value = "100")]
     top: usize,
 
     /// Disable clearing of outdated entries

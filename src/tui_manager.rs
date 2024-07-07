@@ -1,14 +1,14 @@
 use ratatui::prelude::{Color, Modifier, Style};
-use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState, Sparkline, Table, Tabs};
+use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Sparkline, Tabs};
 use ratatui::widgets::canvas::{Canvas, Rectangle};
-use ratatui::layout::{Constraint, Rect};
+use ratatui::layout::{Rect};
 use ratatui::Frame;
 use ratatui::symbols::Marker;
 use ratatui::text::Line;
 
 pub struct TuiManager;
 
-pub const NORMAL_ROW_BG: Color = Color::Rgb(18, 18, 20);
+// pub const NORMAL_ROW_BG: Color = Color::Rgb(18, 18, 20);
 pub const SELECTED_STYLE: Style = Style::new().bg(Color::Rgb(0, 31, 63)).add_modifier(Modifier::BOLD);
 pub const TEXT_FG_COLOR: Color = Color::Rgb(158, 158, 158);
 
@@ -30,11 +30,11 @@ impl TuiManager {
             .block(Block::default().borders(Borders::ALL).title("Summary"))
     }
 
-    pub fn draw_table<'a>(&self, rows: Vec<Row<'a>>, headers: Vec<&'a str>, title: &'a str, constraints: &'a [Constraint]) -> Table<'a> {
-        Table::new(rows, constraints)
-            .block(Block::default().borders(Borders::ALL).title(title))
-            .header(Row::new(headers).style(Style::default().fg(Color::Yellow)))
-    }
+    // pub fn draw_table<'a>(&self, rows: Vec<Row<'a>>, headers: Vec<&'a str>, title: &'a str, constraints: &'a [Constraint]) -> Table<'a> {
+    //     Table::new(rows, constraints)
+    //         .block(Block::default().borders(Borders::ALL).title(title))
+    //         .header(Row::new(headers).style(Style::default().fg(Color::Yellow)))
+    // }
 
     pub fn draw_input<'a>(&self, input: &'a str) -> Paragraph<'a> {
         Paragraph::new(input)
@@ -42,11 +42,11 @@ impl TuiManager {
             .block(Block::default().borders(Borders::ALL).title("Search"))
     }
 
-    pub fn draw_list<'a>(&self, items: Vec<ListItem<'a>>) -> List<'a> {
+    pub fn draw_list<'a>(&self, items: Vec<ListItem<'a>>, title: String) -> List<'a> {
         List::new(items)
-            .block(Block::default().borders(Borders::ALL).style(Style::default().bg(NORMAL_ROW_BG)))
+            .block(Block::default().borders(Borders::ALL).style(Style::default()).title(title))
             .highlight_style(SELECTED_STYLE)
-            .highlight_symbol(">")
+            // .highlight_symbol(">")
     }
 
     pub fn draw_progress_bar(&self, progress: f64) -> Gauge {

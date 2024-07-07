@@ -6,7 +6,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::prelude::{Color, Style};
-use ratatui::widgets::{ListItem, ListState, Row};
+use ratatui::widgets::{ListItem, ListState};
 use ratatui::widgets::canvas::Rectangle;
 use textwrap::wrap;
 use crate::log_data::LogData;
@@ -21,6 +21,8 @@ pub struct App {
     last_requests_state: ListState,
     ip_list_state: ListState,
     request_list_state: ListState,
+    top_ip_list_state: ListState,
+    top_url_list_state: ListState,
     input: String,
     current_page: usize,
     total_pages: usize,
@@ -38,6 +40,8 @@ impl App {
             last_requests_state: ListState::default(),
             ip_list_state: ListState::default(),
             request_list_state: ListState::default(),
+            top_ip_list_state: ListState::default(),
+            top_url_list_state: ListState::default(),
             input: String::new(),
             current_page: 0,
             total_pages: 0,
@@ -133,34 +137,32 @@ impl App {
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(chunks[1]);
 
-        frame.render_widget(self.tui_manager.draw_table(
-            top_ips.iter().map(|(ip, entry)| {
-                let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-                let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
-                Row::new(vec![ip.clone(), entry.count.to_string(), last_update_str])
-            }).collect(),
-            vec!["IP", "Requests", "Last Update"],
-            "Top IPs",
-            &[Constraint::Length(50), Constraint::Length(20), Constraint::Length(30)]
-        ), chunks[0]);
 
-        frame.render_widget(self.tui_manager.draw_table(
-            top_urls.iter().map(|(url, entry)| {
-                let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-                let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
-                Row::new(vec![
-                    entry.request_type.clone(),
-                    entry.request_domain.clone(),
-                    url.clone(),
-                    entry.count.to_string(),
-                    last_update_str,
-                ])
-            }).collect(),
-            vec!["Type", "Domain", "URL", "Requests", "Last Update"],
-            "Top URLs",
-            &[Constraint::Length(10), Constraint::Length(20), Constraint::Length(90), Constraint::Length(10), Constraint::Length(20)]
-        ), chunks[1]);
+        // Top IPs
+        let ip_items: Vec<ListItem> = top_ips.iter().map(|(ip, entry)| {
+            let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+            let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
+            ListItem::new(format!("{:<15} | {:<8} | {}", ip, entry.count, last_update_str))
+        }).collect();
+
+
+        frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone(), format!("{:<15} | {:<8} | {}", "Top IPs", "Requests", "Last Update").to_string()), chunks[0], &mut self.top_ip_list_state);
+
+        self.tui_manager.draw_scrollbar(ip_items.len(), self.top_ip_list_state.selected().unwrap_or(0), frame, chunks[0]);
+
+        // Top URLs
+        let url_items: Vec<ListItem> = top_urls.iter().map(|(url, entry)| {
+            let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+            let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
+            ListItem::new(format!("{:<50} | {:<20} | {:<6} | {:<8} | {}", url, entry.request_type, entry.request_domain, entry.count, last_update_str))
+        }).collect();
+
+        frame.render_stateful_widget(self.tui_manager.draw_list(url_items.clone(), format!("{:<50} | {:<20} | {:<6} | {:<8} | {}",  "Top URLs", "Type", "Domain", "Requests", "Last Update").to_string()), chunks[1], &mut self.top_url_list_state);
+
+        self.tui_manager.draw_scrollbar(url_items.len(), self.top_url_list_state.selected().unwrap_or(0), frame, chunks[1]);
     }
+
+
 
     fn draw_last_requests(&mut self, frame: &mut Frame, area: Rect) {
         let items: Vec<ListItem>;
@@ -200,7 +202,7 @@ impl App {
         frame.render_widget(self.tui_manager.draw_input(&self.input), header_chunks[0]);
         frame.render_widget(self.tui_manager.draw_pagination(pages.clone(), self.current_page), header_chunks[1]);
 
-        frame.render_stateful_widget(self.tui_manager.draw_list(items.clone()), chunks[1], &mut self.last_requests_state);
+        frame.render_stateful_widget(self.tui_manager.draw_list(items.clone(), "".to_string()), chunks[1], &mut self.last_requests_state);
         self.tui_manager.draw_scrollbar(items.len(), self.last_requests_state.selected().unwrap_or(0), frame, chunks[1]);
     }
 
@@ -259,10 +261,12 @@ impl App {
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(area);
 
-        frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone()), chunks[0], &mut self.ip_list_state);
+
+
+        frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone(), "Top IPs".to_string()), chunks[0], &mut self.ip_list_state);
         self.tui_manager.draw_scrollbar(ip_items.len(), self.ip_list_state.selected().unwrap_or(0), frame, chunks[0]);
 
-        frame.render_stateful_widget(self.tui_manager.draw_list(request_items.clone()), chunks[1], &mut self.request_list_state);
+        frame.render_stateful_widget(self.tui_manager.draw_list(request_items.clone(), "Selected ip request".to_string()), chunks[1], &mut self.request_list_state);
         self.tui_manager.draw_scrollbar(request_items.len(), self.request_list_state.selected().unwrap_or(0), frame, chunks[1]);
 
         if self.ip_list_state.selected().is_none() {
@@ -365,6 +369,10 @@ impl App {
 
     fn on_up(&mut self) {
         match self.current_tab {
+            0 => {
+                self.top_ip_list_state.select_previous();
+                self.top_url_list_state.select_previous();
+            }
             1 => {
                 self.last_requests_state.select_previous()
             },
@@ -381,6 +389,10 @@ impl App {
 
     fn on_down(&mut self) {
         match self.current_tab {
+            0 => {
+                self.top_ip_list_state.select_next();
+                self.top_url_list_state.select_next();
+            }
             1 => self.last_requests_state.select_next(),
             2 => {
                 if self.request_list_state.selected().is_some() {
