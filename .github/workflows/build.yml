@@ -105,6 +105,7 @@ jobs:
           strip: true
 
       - name: Rename binary
+        shell: bash
         run: |
           mkdir -p artifacts
           if [[ "${{ runner.os }}" == "windows-latest" ]]; then
