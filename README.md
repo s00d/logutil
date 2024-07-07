@@ -1,3 +1,18 @@
+<div align="center">
+    <a href="https://crates.io/crates/logutil" target="_blank">
+        <img src="https://img.shields.io/crates/v/logutil?style=for-the-badge" alt="crates.io version">
+    </a>
+    <a href="https://crates.io/crates/logutil" target="_blank">
+        <img src="https://img.shields.io/crates/d/logutil?style=for-the-badge" alt="crates.io downloads">
+    </a>
+    <a href="https://github.com/s00d/logutil/blob/master/LICENSE" target="_blank">
+        <img src="https://img.shields.io/crates/l/logutil?style=for-the-badge" alt="crates.io license">
+    </a>
+    <a href="https://github.com/s00d/logutil" target="_blank">
+        <img src="https://img.shields.io/github/stars/s00d/logutil?style=for-the-badge" alt="GitHub stars">
+    </a>
+</div>
+
 # Log Util
 
 Log Util is a Rust-based tool designed to analyze Nginx access logs. It reads log files, extracts and counts requests by IP addresses and URLs, and displays the top IP addresses and URLs. The tool can handle large log files by reading only new data as it is appended, or by processing the entire file from the beginning.
