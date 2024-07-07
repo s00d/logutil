@@ -19,49 +19,42 @@ jobs:
             os: ubuntu-20.04
             target: aarch64-unknown-linux-gnu
             bin: logutil
-            name: logutil-Linux-aarch64-gnu.tar.gz
             command: build
 
           - release_for: Linux-x86_64
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
             bin: logutil
-            name: logutil-Linux-x86_64-gnu.tar.gz
             command: build
 
           - release_for: Linux-i686
             os: ubuntu-20.04
             target: i686-unknown-linux-musl
             bin: logutil
-            name: logutil-Linux-i686-musl.tar.gz
             command: build
 
           - release_for: Windows-aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
             bin: logutil.exe
-            name: logutil-Windows-aarch64.zip
             command: build
 
           - release_for: Windows-x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: logutil.exe
-            name: logutil-Windows-x86_64.zip
             command: build
 
           - release_for: macOS-x86_64
             os: macOS-latest
             target: x86_64-apple-darwin
             bin: logutil
-            name: logutil-Darwin-x86_64.tar.gz
             command: build
 
           - release_for: macOS-aarch64
             os: macOS-latest
             target: aarch64-apple-darwin
             bin: logutil
-            name: logutil-Darwin-aarch64.tar.gz
             command: build
 
     steps:
@@ -111,19 +104,18 @@ jobs:
           args: "--locked --release"
           strip: true
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.version }}
-          name: v${{ env.version }}
-          draft: true
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rename binary
+        run: |
+          mkdir -p artifacts
+          if [[ "${{ runner.os }}" == "windows-latest" ]]; then
+            mv target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} artifacts/${{ matrix.platform.bin }}-${{ matrix.platform.target }}.exe
+          else
+            mv target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} artifacts/${{ matrix.platform.bin }}-${{ matrix.platform.target }}
+          fi
+
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.version }}
-          files: "target/${{ matrix.platform.name }}/release/logutil-*"
+          files: "artifacts/*"
