@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use chrono::{Local, Timelike, TimeZone, Utc};
@@ -227,27 +226,19 @@ impl App {
         let log_data = self.log_data.lock().unwrap();
         let mut top_ips = log_data.get_top_n(self.top_n).0;
 
-        top_ips.sort_by(|a, b| {
-            let ip_a: Vec<u8> = a.0.split('.').map(|s| s.parse().unwrap()).collect();
-            let ip_b: Vec<u8> = b.0.split('.').map(|s| s.parse().unwrap()).collect();
-            for i in 0..4 {
-                match ip_a[i].cmp(&ip_b[i]) {
-                    Ordering::Equal => continue,
-                    other => return other,
-                }
-            }
-            Ordering::Equal
-        });
+        top_ips.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
         let ip_items: Vec<ListItem> = top_ips
             .iter()
-            .map(|(ip, _)| ListItem::new(ip.clone()).style(Style::default().fg(Color::Yellow)))
+            .map(|(ip, entry)| {
+                ListItem::new(format!("{:<15} ({})", ip, entry.count)).style(Style::default().fg(Color::Yellow))
+            })
             .collect();
 
         let selected_ip = self.ip_list_state.selected().and_then(|i| top_ips.get(i).map(|(ip, _)| ip.clone()));
 
         let mut request_items: Vec<ListItem> = vec![];
-        if let Some(ip) = selected_ip {
+        if let Some(ip) = selected_ip.clone() {
             let last_requests = log_data.get_last_requests(&ip);
             for request in last_requests {
                 let wrapped_text = wrap(&request, (area.width as f64 * 0.7) as usize - 5);
@@ -266,7 +257,13 @@ impl App {
         frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone(), "Top IPs".to_string()), chunks[0], &mut self.ip_list_state);
         self.tui_manager.draw_scrollbar(ip_items.len(), self.ip_list_state.selected().unwrap_or(0), frame, chunks[0]);
 
-        frame.render_stateful_widget(self.tui_manager.draw_list(request_items.clone(), "Selected ip request".to_string()), chunks[1], &mut self.request_list_state);
+        let request_list_title = if let Some(ip) = selected_ip.clone() {
+            format!("Requests for IP: {}", ip)
+        } else {
+            "Requests".to_string()
+        };
+
+        frame.render_stateful_widget(self.tui_manager.draw_list(request_items.clone(), request_list_title), chunks[1], &mut self.request_list_state);
         self.tui_manager.draw_scrollbar(request_items.len(), self.request_list_state.selected().unwrap_or(0), frame, chunks[1]);
 
         if self.ip_list_state.selected().is_none() {
