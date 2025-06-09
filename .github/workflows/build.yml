@@ -112,8 +112,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools python3 python3-pip
+          sudo apt-get install -y libclang-dev
+          sudo apt-get install -y libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render-util0-dev libxcb-icccm4-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-randr0-dev libxcb-xinerama0-dev libxcb-xkb-dev libxcb-xrm-dev libxcb-util-dev
           sudo ln -s /usr/bin/musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
           sudo ln -s /usr/bin/musl-gcc /usr/local/bin/musl-gcc
+
+      - name: Install FreeBSD dependencies
+        if: matrix.platform.release_for == 'FreeBSD-x86_64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip
+          sudo apt-get install -y crossbuild-essential-amd64
+          sudo apt-get install -y libclang-dev
+          sudo apt-get install -y libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev libxcb-render-util0-dev libxcb-icccm4-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-randr0-dev libxcb-xinerama0-dev libxcb-xkb-dev libxcb-xrm-dev libxcb-util-dev
 
       - name: Get version
         if: runner.os != 'Windows'
