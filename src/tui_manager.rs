@@ -3,8 +3,6 @@ use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Scrollb
 use ratatui::widgets::canvas::{Canvas, Rectangle};
 use ratatui::layout::{Rect, Constraint, Layout, Direction};
 use ratatui::Frame;
-use ratatui::symbols::Marker;
-use ratatui::text::{Line};
 use std::time::SystemTime;
 use chrono::{Local, TimeZone, Utc, Timelike};
 use crate::log_data::LogEntry;
