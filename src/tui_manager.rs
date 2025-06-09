@@ -86,25 +86,219 @@ impl TuiManager {
             .divider("|")
     }
 
-    pub fn draw_heatmap<'a>(&self, cells: Vec<Rectangle>, x_labels: Vec<(f64, String)>, y_labels: Vec<(f64, String)>) -> Canvas<'a, impl Fn(&mut ratatui::widgets::canvas::Context) + 'a> {
+    pub fn draw_heatmap<'a>(
+        &'a self,
+        cells: Vec<Rectangle>,
+        x_labels: Vec<(f64, String)>,
+        y_labels: Vec<(f64, String)>,
+    ) -> Canvas<'a, impl Fn(&mut ratatui::widgets::canvas::Context) + 'a> {
         Canvas::default()
             .marker(Marker::HalfBlock)
-            .block(Block::default().borders(Borders::ALL).title("Heatmap (hourly by date, UTC)"))
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                .title("Heatmap (Requests by Hour)")
+                .title_alignment(ratatui::layout::Alignment::Center))
             .x_bounds([0.0, 25.5])  // 24 hours + space for labels
             .y_bounds([0.0, y_labels.len() as f64 + 1.0])  // Number of unique dates + space for labels
             .paint(move |ctx| {
+                // Рисуем сетку
+                for hour in 0..24 {
+                    let x = hour as f64 + 1.3;
+                    ctx.draw(&Rectangle {
+                        x,
+                        y: 0.0,
+                        width: 0.8,
+                        height: y_labels.len() as f64 + 1.0,
+                        color: Color::Rgb(40, 40, 40),
+                    });
+                }
+
+                // Рисуем подписи часов
                 for label in &x_labels {
-                    ctx.print(label.0, 0.0, Line::from(label.1.clone()));
+                    ctx.print(label.0, 0.0, Line::from(label.1.clone())
+                        .style(Style::new()
+                            .fg(Color::Rgb(144, 238, 144))
+                            .add_modifier(Modifier::BOLD)));
                 }
 
+                // Рисуем подписи дат
                 for label in &y_labels {
-                    ctx.print(0.0, label.0, Line::from(label.1.clone()));
+                    ctx.print(0.0, label.0, Line::from(label.1.clone())
+                        .style(Style::new()
+                            .fg(Color::Rgb(144, 238, 144))
+                            .add_modifier(Modifier::BOLD)));
                 }
 
+                // Рисуем ячейки тепловой карты
                 for cell in &cells {
                     ctx.draw(cell);
                 }
+
+                // Добавляем легенду
+                let legend_y = y_labels.len() as f64 + 1.5;
+                let legend_text = "Legend: Low → High";
+                ctx.print(1.0, legend_y, Line::from(legend_text)
+                    .style(Style::new()
+                        .fg(Color::Rgb(144, 238, 144))
+                        .add_modifier(Modifier::BOLD)));
+
+                // Рисуем градиент легенды
+                for i in 0..20 {
+                    let x = 20.0 + i as f64 * 0.3;
+                    let normalized_value = i as f64 / 19.0;
+                    let (r, g, b) = self.get_heatmap_color(normalized_value);
+                    ctx.draw(&Rectangle {
+                        x,
+                        y: legend_y,
+                        width: 0.3,
+                        height: 0.5,
+                        color: Color::Rgb(r, g, b),
+                    });
+                }
             })
+    }
+
+    /// Генерирует цвет для тепловой карты на основе нормализованного значения
+    fn get_heatmap_color(&self, normalized_value: f64) -> (u8, u8, u8) {
+        if normalized_value < 0.5 {
+            // От синего к зеленому
+            let t = normalized_value * 2.0;
+            (
+                0,
+                (t * 255.0) as u8,
+                ((1.0 - t) * 255.0) as u8,
+            )
+        } else {
+            // От зеленого к красному
+            let t = (normalized_value - 0.5) * 2.0;
+            (
+                (t * 255.0) as u8,
+                ((1.0 - t) * 255.0) as u8,
+                0,
+            )
+        }
+    }
+
+    /// Renders a sparkline graph of requests
+    pub fn draw_requests_sparkline<'a>(
+        &self,
+        frame: &mut Frame,
+        area: Rect,
+        data: &[u64],
+        min_value: u64,
+        max_value: u64,
+        start_time: i64,
+        end_time: i64,
+    ) {
+        let sparkline_title = format!(
+            "Requests over last 20 minutes (Min: {}, Max: {}, Start: {}, End: {})",
+            min_value,
+            max_value,
+            start_time,
+            end_time
+        );
+
+        frame.render_widget(self.draw_sparkline(data, &sparkline_title), area);
+    }
+
+    /// Рендерит тепловую карту
+    pub fn render_heatmap<'a>(
+        &'a self,
+        frame: &mut Frame,
+        area: Rect,
+        cells: Vec<Rectangle>,
+        x_labels: Vec<(f64, String)>,
+        y_labels: Vec<(f64, String)>,
+        min_value: u64,
+        max_value: u64,
+    ) {
+        // Разделяем область на основную часть и информационную панель
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ].as_ref())
+            .split(area);
+
+        // Рендерим основную тепловую карту
+        frame.render_widget(self.draw_heatmap(cells, x_labels, y_labels), chunks[0]);
+
+        // Отображаем информацию о значениях в отдельном виджете
+        let info_text = format!(
+            "Min: {} requests | Max: {} requests | Scale: Blue (Low) → Green → Red (High)",
+            min_value,
+            max_value
+        );
+        frame.render_widget(
+            Paragraph::new(info_text)
+                .style(Style::new()
+                    .fg(Color::Rgb(144, 238, 144))
+                    .add_modifier(Modifier::BOLD))
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))),
+            chunks[1]
+        );
+    }
+
+    /// Генерирует ячейки для тепловой карты
+    pub fn generate_heatmap_cells(
+        &self,
+        sorted_data: &[(i64, u64)],
+        min_value: u64,
+        max_value: u64,
+        unique_dates: &[chrono::NaiveDate],
+    ) -> Vec<Rectangle> {
+        let mut cells = Vec::new();
+
+        for &(timestamp, value) in sorted_data.iter() {
+            // Нормализуем значение от 0 до 1
+            let normalized_value = if max_value == min_value {
+                0.5 // Если все значения одинаковые, используем средний цвет
+            } else {
+                (value as f64 - min_value as f64) / (max_value as f64 - min_value as f64)
+            };
+
+            let (r, g, b) = self.get_heatmap_color(normalized_value);
+
+            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+            let hour = datetime.hour() as f64;
+            let date_index = unique_dates.iter().position(|&d| d == datetime.date_naive()).unwrap() as f64;
+
+            // Добавляем тень для эффекта глубины
+            cells.push(Rectangle {
+                x: hour + 1.4,
+                y: date_index + 1.0,
+                width: 0.8,
+                height: 0.75,
+                color: Color::Rgb(20, 20, 20),
+            });
+
+            // Основная ячейка
+            cells.push(Rectangle {
+                x: hour + 1.3,
+                y: date_index + 0.9,
+                width: 0.8,
+                height: 0.75,
+                color: Color::Rgb(r, g, b),
+            });
+        }
+
+        cells
+    }
+
+    /// Gets bounds for the sparkline graph
+    pub fn get_sparkline_bounds(&self, data: &[u64], sorted_data: &[(i64, u64)]) -> (u64, u64, i64, i64) {
+        let min_value = *data.iter().min().unwrap_or(&0);
+        let max_value = *data.iter().max().unwrap_or(&0);
+        let start_time = sorted_data.last().map(|&(k, _)| k).unwrap_or(0);
+        let end_time = sorted_data.first().map(|&(k, _)| k).unwrap_or(0);
+        (min_value, max_value, start_time, end_time)
     }
 
     pub fn draw_scrollbar(&self, count: usize, selected_index: usize, frame: &mut Frame, rect: Rect) {
@@ -491,123 +685,5 @@ impl TuiManager {
         ListItem::new(format!("{:<25} │ {:<20} │ {:<10} │ {:<12} │ {}",
             "URL", "Type", "Domain", "Requests", "Last Update"))
             .style(Style::new().fg(Color::Rgb(0, 191, 255)).add_modifier(Modifier::BOLD))
-    }
-
-    /// Renders a sparkline graph of requests
-    pub fn draw_requests_sparkline<'a>(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        data: &[u64],
-        min_value: u64,
-        max_value: u64,
-        start_time: i64,
-        end_time: i64,
-    ) {
-        let sparkline_title = format!(
-            "Requests over last 20 minutes (Min: {}, Max: {}, Start: {}, End: {})",
-            min_value,
-            max_value,
-            start_time,
-            end_time
-        );
-
-        frame.render_widget(self.draw_sparkline(data, &sparkline_title), area);
-    }
-
-    /// Renders a heatmap of requests
-    pub fn render_heatmap<'a>(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        cells: Vec<Rectangle>,
-        x_labels: Vec<(f64, String)>,
-        y_labels: Vec<(f64, String)>,
-        min_value: u64,
-        max_value: u64,
-    ) {
-        // Render heatmap
-        frame.render_widget(self.draw_heatmap(cells, x_labels, y_labels), area);
-
-        // Display value information in a separate widget
-        let title = format!(
-            "Heatmap (Min: {}, Max: {})",
-            min_value,
-            max_value
-        );
-        let title_area = Rect {
-            x: area.x,
-            y: area.y,
-            width: area.width,
-            height: 1,
-        };
-        frame.render_widget(
-            Paragraph::new(title)
-                .style(Style::default().fg(Color::White))
-                .block(Block::default().borders(Borders::NONE)),
-            title_area
-        );
-    }
-
-    /// Generates cells for the heatmap
-    pub fn generate_heatmap_cells(
-        &self,
-        sorted_data: &[(i64, u64)],
-        min_value: u64,
-        max_value: u64,
-        unique_dates: &[chrono::NaiveDate],
-    ) -> Vec<Rectangle> {
-        let mut cells = Vec::new();
-
-        for &(timestamp, value) in sorted_data.iter() {
-            // Нормализуем значение от 0 до 1
-            let normalized_value = if max_value == min_value {
-                0.5 // Если все значения одинаковые, используем средний цвет
-            } else {
-                (value as f64 - min_value as f64) / (max_value as f64 - min_value as f64)
-            };
-
-            // Используем градиент от синего (низкие значения) через зеленый к красному (высокие значения)
-            let (r, g, b) = if normalized_value < 0.5 {
-                // От синего к зеленому
-                let t = normalized_value * 2.0;
-                (
-                    0,
-                    (t * 255.0) as u8,
-                    ((1.0 - t) * 255.0) as u8,
-                )
-            } else {
-                // От зеленого к красному
-                let t = (normalized_value - 0.5) * 2.0;
-                (
-                    (t * 255.0) as u8,
-                    ((1.0 - t) * 255.0) as u8,
-                    0,
-                )
-            };
-
-            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
-            let hour = datetime.hour() as f64;
-            let date_index = unique_dates.iter().position(|&d| d == datetime.date_naive()).unwrap() as f64;
-
-            cells.push(Rectangle {
-                x: hour + 1.3,
-                y: date_index + 0.9,
-                width: 0.8,
-                height: 0.75,
-                color: Color::Rgb(r, g, b),
-            });
-        }
-
-        cells
-    }
-
-    /// Gets bounds for the sparkline graph
-    pub fn get_sparkline_bounds(&self, data: &[u64], sorted_data: &[(i64, u64)]) -> (u64, u64, i64, i64) {
-        let min_value = *data.iter().min().unwrap_or(&0);
-        let max_value = *data.iter().max().unwrap_or(&0);
-        let start_time = sorted_data.last().map(|&(k, _)| k).unwrap_or(0);
-        let end_time = sorted_data.first().map(|&(k, _)| k).unwrap_or(0);
-        (min_value, max_value, start_time, end_time)
     }
 }
