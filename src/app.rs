@@ -1,16 +1,22 @@
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
+use std::time::{SystemTime, Instant};
 use chrono::{Local, Timelike, TimeZone, Utc};
 use crossterm::event::{KeyCode, KeyModifiers};
-use ratatui::Frame;
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::prelude::{Color, Style};
-use ratatui::widgets::{ListItem, ListState};
-use ratatui::widgets::canvas::Rectangle;
+use ratatui::{
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    widgets::{ListItem, Block, Borders, ListState},
+    Frame,
+};
 use textwrap::wrap;
 use crate::log_data::LogData;
-use crate::tui_manager::{TuiManager, TEXT_FG_COLOR};
+use crate::tui_manager::{TuiManager, TEXT_FG_COLOR, HEADER_STYLE};
+use clipboard::{ClipboardContext, ClipboardProvider};
 
+struct ModalState {
+    message: String,
+    show_until: Option<Instant>,
+}
 
 pub struct App {
     log_data: Arc<Mutex<LogData>>,
@@ -27,6 +33,8 @@ pub struct App {
     total_pages: usize,
     progress: f64,
     tui_manager: TuiManager,
+    overview_panel: usize, // 0 - left panel (IP), 1 - right panel (URL)
+    modal_state: Option<ModalState>,
 }
 
 impl App {
@@ -46,6 +54,8 @@ impl App {
             total_pages: 0,
             progress: 0.0,
             tui_manager: TuiManager::new(),
+            overview_panel: 0, // Left panel selected by default
+            modal_state: None,
         }
     }
 
@@ -53,15 +63,62 @@ impl App {
         self.progress = progress.clamp(0.0, 100.0);
     }
 
-    pub(crate) fn handle_input(&mut self, key: KeyCode, modifiers: KeyModifiers) {
+    pub(crate) fn handle_input(&mut self, key: crossterm::event::KeyCode, modifiers: crossterm::event::KeyModifiers) {
         match key {
+            KeyCode::Char('q') => self.should_quit = true,
+            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.should_quit = true,
+            KeyCode::Enter => {
+                if self.current_tab == 0 {
+                    self.copy_selected_to_clipboard();
+                }
+            }
+            KeyCode::Up => {
+                match self.current_tab {
+                    0 => {
+                        match self.overview_panel {
+                            0 => self.top_ip_list_state.select_previous(),
+                            1 => self.top_url_list_state.select_previous(),
+                            _ => {}
+                        }
+                    }
+                    1 => {
+                        self.last_requests_state.select_previous();
+                    }
+                    2 => {
+                        if self.request_list_state.selected().is_some() {
+                            self.request_list_state.select_previous();
+                        } else {
+                            self.ip_list_state.select_previous();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Down => {
+                match self.current_tab {
+                    0 => {
+                        match self.overview_panel {
+                            0 => self.top_ip_list_state.select_next(),
+                            1 => self.top_url_list_state.select_next(),
+                            _ => {}
+                        }
+                    }
+                    1 => {
+                        self.last_requests_state.select_next();
+                    }
+                    2 => {
+                        if self.request_list_state.selected().is_some() {
+                            self.request_list_state.select_next();
+                        } else {
+                            self.ip_list_state.select_next();
+                        }
+                    }
+                    _ => {}
+                }
+            }
             KeyCode::Tab | KeyCode::Char('t') => self.toggle_tab(),
-            KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => self.quit(),
-            KeyCode::Up => self.on_up(),
-            KeyCode::Down => self.on_down(),
             KeyCode::Left => self.on_left(),
             KeyCode::Right => self.on_right(),
-            KeyCode::Char('q') if modifiers.contains(KeyModifiers::CONTROL) => self.quit(),
             KeyCode::Backspace => {
                 self.last_requests_state.select(None);
                 self.input.pop();
@@ -75,7 +132,7 @@ impl App {
     }
 
     pub(crate) fn draw(&mut self, frame: &mut Frame) {
-        let size = frame.size();
+        let size = frame.area();
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .margin(1)
@@ -87,20 +144,41 @@ impl App {
 
         let header_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(60), Constraint::Percentage(10)].as_ref())
+            .constraints([
+                Constraint::Percentage(30),
+                Constraint::Percentage(60),
+                Constraint::Percentage(10)
+            ].as_ref())
             .split(chunks[0]);
 
-        frame.render_widget(self.tui_manager.draw_tabs(
-            vec!["Overview".into(), "Requests".into(), "Detailed".into(), "Sparkline".into(), "Heatmap".into()],
-            self.current_tab,
-            "Tabs"
-        ), header_chunks[0]);
+        // Улучшенное отображение вкладок
+        frame.render_widget(
+            self.tui_manager.draw_tabs(
+                vec!["Overview".into(), "Requests".into(), "Detailed".into(), "Sparkline".into(), "Heatmap".into()],
+                self.current_tab,
+                "Navigation"
+            ).style(HEADER_STYLE)
+            .highlight_style(Style::new().fg(Color::White).bg(Color::Rgb(0, 95, 135))),
+            header_chunks[0]
+        );
 
-        frame.render_widget(self.tui_manager.draw_summary(
-            &self.get_summary_text()
-        ), header_chunks[1]);
+        // Возвращаем использование draw_summary
+        frame.render_widget(
+            self.tui_manager.draw_summary(&self.get_summary_text())
+                .style(HEADER_STYLE)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))),
+            header_chunks[1]
+        );
 
-        frame.render_widget(self.tui_manager.draw_progress_bar(self.progress), header_chunks[2]);
+        // Улучшенный прогресс-бар
+        frame.render_widget(
+            self.tui_manager.draw_progress_bar(self.progress)
+                .style(Style::new().fg(Color::Rgb(144, 238, 144)).bg(Color::DarkGray)),
+            header_chunks[2]
+        );
 
         match self.current_tab {
             0 => self.draw_overview(frame, chunks[1]),
@@ -109,6 +187,17 @@ impl App {
             3 => self.draw_requests_sparkline(frame, chunks[1]),
             4 => self.draw_heatmap(frame, chunks[1]),
             _ => {}
+        }
+
+        // Проверяем и обновляем состояние модального окна
+        if let Some(modal) = &self.modal_state {
+            if let Some(show_until) = modal.show_until {
+                if Instant::now() > show_until {
+                    self.modal_state = None;
+                } else {
+                    self.draw_modal(frame);
+                }
+            }
         }
     }
 
@@ -126,42 +215,26 @@ impl App {
         let log_data = self.log_data.lock().unwrap();
         let (top_ips, top_urls) = log_data.get_top_n(self.top_n);
 
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(0), Constraint::Min(0)].as_ref())
-            .split(area);
-
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-            .split(chunks[1]);
-
-
-        // Top IPs
+        // Format list items
         let ip_items: Vec<ListItem> = top_ips.iter().map(|(ip, entry)| {
-            let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-            let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
-            ListItem::new(format!("{:<15} | {:<8} | {}", ip, entry.count, last_update_str))
+            self.tui_manager.format_ip_item(ip, entry, self.overview_panel == 0)
         }).collect();
 
-
-        frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone(), format!("{:<15} | {:<8} | {}", "Top IPs", "Requests", "Last Update").to_string()), chunks[0], &mut self.top_ip_list_state);
-
-        self.tui_manager.draw_scrollbar(ip_items.len(), self.top_ip_list_state.selected().unwrap_or(0), frame, chunks[0]);
-
-        // Top URLs
         let url_items: Vec<ListItem> = top_urls.iter().map(|(url, entry)| {
-            let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
-            let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
-            ListItem::new(format!("{:<50} | {:<20} | {:<6} | {:<8} | {}", url, entry.request_type, entry.request_domain, entry.count, last_update_str))
+            self.tui_manager.format_url_item(url, entry, self.overview_panel == 1)
         }).collect();
 
-        frame.render_stateful_widget(self.tui_manager.draw_list(url_items.clone(), format!("{:<50} | {:<20} | {:<6} | {:<8} | {}",  "Top URLs", "Type", "Domain", "Requests", "Last Update").to_string()), chunks[1], &mut self.top_url_list_state);
-
-        self.tui_manager.draw_scrollbar(url_items.len(), self.top_url_list_state.selected().unwrap_or(0), frame, chunks[1]);
+        // Use TuiManager to draw the overview
+        self.tui_manager.draw_overview(
+            frame,
+            area,
+            ip_items,
+            url_items,
+            self.overview_panel,
+            &mut self.top_ip_list_state,
+            &mut self.top_url_list_state,
+        );
     }
-
-
 
     fn draw_last_requests(&mut self, frame: &mut Frame, area: Rect) {
         let items: Vec<ListItem>;
@@ -179,30 +252,23 @@ impl App {
                 .iter()
                 .map(|request| {
                     let wrapped_text = wrap(request, (area.width as f64 * 0.7) as usize - 5);
-                    ListItem::new(wrapped_text.join("\n")).style(Style::default().fg(TEXT_FG_COLOR))
+                    ListItem::new(wrapped_text.join("\n"))
+                        .style(Style::default().fg(TEXT_FG_COLOR))
                 })
                 .collect();
         }
 
         self.total_pages = total_pages;
-        let pages: Vec<String> = (1..=self.total_pages).map(|i| format!("{}", i)).collect();
 
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
-            .split(area);
-
-        let header_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(chunks[0]);
-
-
-        frame.render_widget(self.tui_manager.draw_input(&self.input), header_chunks[0]);
-        frame.render_widget(self.tui_manager.draw_pagination(pages.clone(), self.current_page), header_chunks[1]);
-
-        frame.render_stateful_widget(self.tui_manager.draw_list(items.clone(), "".to_string()), chunks[1], &mut self.last_requests_state);
-        self.tui_manager.draw_scrollbar(items.len(), self.last_requests_state.selected().unwrap_or(0), frame, chunks[1]);
+        self.tui_manager.draw_last_requests(
+            frame,
+            area,
+            items,
+            &self.input,
+            self.current_page,
+            self.total_pages,
+            &mut self.last_requests_state,
+        );
     }
 
     fn get_search_results<'a>(&self, log_data: &'a LogData) -> Vec<&'a String> {
@@ -225,46 +291,38 @@ impl App {
     fn draw_detailed_requests(&mut self, frame: &mut Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
         let mut top_ips = log_data.get_top_n(self.top_n).0;
-
         top_ips.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
         let ip_items: Vec<ListItem> = top_ips
             .iter()
             .map(|(ip, entry)| {
-                ListItem::new(format!("{:<15} ({})", ip, entry.count)).style(Style::default().fg(Color::Yellow))
+                self.tui_manager.format_ip_item(ip, entry, self.ip_list_state.selected().is_some())
             })
             .collect();
 
-        let selected_ip = self.ip_list_state.selected().and_then(|i| top_ips.get(i).map(|(ip, _)| ip.clone()));
+        let selected_ip = self.ip_list_state.selected()
+            .and_then(|i| top_ips.get(i).map(|(ip, _)| ip.clone()));
 
         let mut request_items: Vec<ListItem> = vec![];
         if let Some(ip) = selected_ip.clone() {
             let last_requests = log_data.get_last_requests(&ip);
             for request in last_requests {
                 let wrapped_text = wrap(&request, (area.width as f64 * 0.7) as usize - 5);
-                let list_item = ListItem::new(wrapped_text.join("\n")).style(Style::default().fg(TEXT_FG_COLOR));
+                let list_item = ListItem::new(wrapped_text.join("\n"))
+                    .style(Style::default().fg(TEXT_FG_COLOR));
                 request_items.push(list_item);
             }
         }
 
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-            .split(area);
-
-
-
-        frame.render_stateful_widget(self.tui_manager.draw_list(ip_items.clone(), "Top IPs".to_string()), chunks[0], &mut self.ip_list_state);
-        self.tui_manager.draw_scrollbar(ip_items.len(), self.ip_list_state.selected().unwrap_or(0), frame, chunks[0]);
-
-        let request_list_title = if let Some(ip) = selected_ip.clone() {
-            format!("Requests for IP: {}", ip)
-        } else {
-            "Requests".to_string()
-        };
-
-        frame.render_stateful_widget(self.tui_manager.draw_list(request_items.clone(), request_list_title), chunks[1], &mut self.request_list_state);
-        self.tui_manager.draw_scrollbar(request_items.len(), self.request_list_state.selected().unwrap_or(0), frame, chunks[1]);
+        self.tui_manager.draw_detailed_requests(
+            frame,
+            area,
+            ip_items,
+            request_items,
+            selected_ip,
+            &mut self.ip_list_state,
+            &mut self.request_list_state,
+        );
 
         if self.ip_list_state.selected().is_none() {
             self.ip_list_state.select(Some(0));
@@ -286,38 +344,36 @@ impl App {
             return;
         }
 
-        let (min_value, max_value, start_time, end_time) = self.get_sparkline_bounds(&data, &sorted_data);
+        let (min_value, max_value, start_time, end_time) = self.tui_manager.get_sparkline_bounds(&data, &sorted_data);
 
-        let sparkline_title = format!(
-            "Requests over last 20 minutes (Min: {}, Max: {}, Start: {}, End: {})",
+        self.tui_manager.draw_requests_sparkline(
+            frame,
+            area,
+            &data,
             min_value,
             max_value,
             start_time,
-            end_time
+            end_time,
         );
-
-        frame.render_widget(self.tui_manager.draw_sparkline(&data, &sparkline_title), area);
-    }
-
-    fn get_sparkline_bounds(&self, data: &[u64], sorted_data: &[(i64, u64)]) -> (u64, u64, i64, i64) {
-        let min_value = *data.iter().min().unwrap_or(&0);
-        let max_value = *data.iter().max().unwrap_or(&0);
-        let start_time = sorted_data.last().map(|&(k, _)| k).unwrap_or(0);
-        let end_time = sorted_data.first().map(|&(k, _)| k).unwrap_or(0);
-        (min_value, max_value, start_time, end_time)
     }
 
     fn draw_heatmap(&mut self, frame: &mut Frame, area: Rect) {
         let log_data = self.log_data.lock().unwrap();
-        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter().map(|(&k, &v)| (k, v as u64)).collect();
+        let mut sorted_data: Vec<_> = log_data.requests_per_interval.iter()
+            .map(|(&k, &v)| (k, v as u64))
+            .collect();
+        
+        // Сортируем по дате и времени
         sorted_data.sort_by_key(|&(timestamp, _)| {
             let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
-            datetime.date_naive()
+            (datetime.date_naive(), datetime.hour())
         });
 
+        // Получаем минимальное и максимальное значения для нормализации
         let min_value = sorted_data.iter().map(|&(_, v)| v).min().unwrap_or(0);
         let max_value = sorted_data.iter().map(|&(_, v)| v).max().unwrap_or(1);
 
+        // Получаем уникальные даты
         let mut unique_dates: Vec<_> = sorted_data.iter()
             .map(|&(timestamp, _)| {
                 let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
@@ -329,81 +385,34 @@ impl App {
 
         unique_dates.sort();
 
-        let cells = self.generate_heatmap_cells(&sorted_data, min_value, max_value, &unique_dates);
+        let cells = self.tui_manager.generate_heatmap_cells(&sorted_data, min_value, max_value, &unique_dates);
 
-        let x_labels: Vec<(f64, String)> = (0..24).map(|hour| (hour as f64 + 1.7, format!("{}", hour))).collect();
-        let y_labels: Vec<(f64, String)> = unique_dates.iter().enumerate().map(|(index, date)| (index as f64 + 1.0, date.format("%Y-%m-%d").to_string())).collect();
+        // Добавляем подписи для осей
+        let x_labels: Vec<(f64, String)> = (0..24).map(|hour| (hour as f64 + 1.7, format!("{:02}:00", hour))).collect();
 
-        frame.render_widget(self.tui_manager.draw_heatmap(cells, x_labels, y_labels), area);
-    }
+        let y_labels: Vec<(f64, String)> = unique_dates.iter()
+            .enumerate()
+            .map(|(index, date)| (index as f64 + 1.0, date.format("%Y-%m-%d").to_string()))
+            .collect();
 
-    fn generate_heatmap_cells(&self, sorted_data: &[(i64, u64)], min_value: u64, max_value: u64, unique_dates: &[chrono::NaiveDate]) -> Vec<Rectangle> {
-        let mut cells = Vec::new();
-
-        for &(timestamp, value) in sorted_data.iter() {
-            let intensity = (value as f64 - min_value as f64) / (max_value as f64 - min_value as f64);
-            let color = Color::Rgb(
-                (intensity * 255.0) as u8,
-                0,
-                (255.0 - intensity * 255.0) as u8,
-            );
-
-            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
-            let hour = datetime.hour() as f64;
-            let date_index = unique_dates.iter().position(|&d| d == datetime.date_naive()).unwrap() as f64;
-
-            cells.push(Rectangle {
-                x: hour + 1.3,
-                y: date_index + 0.9,
-                width: 0.8,
-                height: 0.75,
-                color,
-            });
-        }
-
-        cells
-    }
-
-    fn on_up(&mut self) {
-        match self.current_tab {
-            0 => {
-                self.top_ip_list_state.select_previous();
-                self.top_url_list_state.select_previous();
-            }
-            1 => {
-                self.last_requests_state.select_previous()
-            },
-            2 => {
-                if self.request_list_state.selected().is_some() {
-                    self.request_list_state.select_previous();
-                } else {
-                    self.ip_list_state.select_previous();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn on_down(&mut self) {
-        match self.current_tab {
-            0 => {
-                self.top_ip_list_state.select_next();
-                self.top_url_list_state.select_next();
-            }
-            1 => self.last_requests_state.select_next(),
-            2 => {
-                if self.request_list_state.selected().is_some() {
-                    self.request_list_state.select_next();
-                } else {
-                    self.ip_list_state.select_next();
-                }
-            }
-            _ => {}
-        }
+        self.tui_manager.render_heatmap(
+            frame,
+            area,
+            cells,
+            x_labels,
+            y_labels,
+            min_value,
+            max_value,
+        );
     }
 
     fn on_left(&mut self) {
         match self.current_tab {
+            0 => {
+                if self.overview_panel > 0 {
+                    self.overview_panel -= 1;
+                }
+            }
             1 => {
                 if self.current_page > 0 {
                     self.current_page -= 1;
@@ -421,6 +430,11 @@ impl App {
 
     fn on_right(&mut self) {
         match self.current_tab {
+            0 => {
+                if self.overview_panel < 1 {
+                    self.overview_panel += 1;
+                }
+            }
             1 => {
                 if self.current_page < self.total_pages - 1 {
                     self.current_page += 1;
@@ -440,7 +454,70 @@ impl App {
         self.current_tab = (self.current_tab + 1) % 5;
     }
 
-    fn quit(&mut self) {
-        self.should_quit = true;
+    fn draw_modal(&self, frame: &mut Frame) {
+        if let Some(modal) = &self.modal_state {
+            self.tui_manager.draw_modal(frame, &modal.message);
+        }
+    }
+
+    fn copy_selected_to_clipboard(&mut self) {
+        let log_data = self.log_data.lock().unwrap();
+        let (top_ips, top_urls) = log_data.get_top_n(self.top_n);
+
+        let (text_to_copy, message) = match self.overview_panel {
+            0 => {
+                if let Some(selected) = self.top_ip_list_state.selected() {
+                    if selected > 0 {
+                        if let Some((ip, entry)) = top_ips.get(selected - 1) {
+                            let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+                            let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
+                            (
+                                format!("IP: {}\nRequests: {}\nLast Update: {}", ip, entry.count, last_update_str),
+                                format!("IP address copied: {}", ip)
+                            )
+                        } else {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+            1 => {
+                if let Some(selected) = self.top_url_list_state.selected() {
+                    if selected > 0 {
+                        if let Some((url, entry)) = top_urls.get(selected - 1) {
+                            let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
+                            let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
+                            (
+                                format!(
+                                    "URL: {}\nType: {}\nDomain: {}\nRequests: {}\nLast Update: {}",
+                                    url, entry.request_type, entry.request_domain, entry.count, last_update_str
+                                ),
+                                format!("URL copied\n{}", url)
+                            )
+                        } else {
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            }
+            _ => return,
+        };
+
+        if let Ok(mut ctx) = ClipboardContext::new() {
+            if ctx.set_contents(text_to_copy).is_ok() {
+                self.modal_state = Some(ModalState {
+                    message,
+                    show_until: Some(Instant::now() + std::time::Duration::from_millis(1500)),
+                });
+            }
+        }
     }
 }

@@ -83,11 +83,13 @@ async fn process_last_n_lines(
     progress_callback: &impl Fn(f64),
     _file_size: f64,
 ) -> std::io::Result<()> {
-    let mut buffer = Vec::new();
-    reader.read_to_end(&mut buffer)?;
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    while reader.read_line(&mut line)? > 0 {
+        lines.push(line.clone());
+        line.clear();
+    }
 
-    let content = String::from_utf8_lossy(&buffer);
-    let lines: Vec<&str> = content.lines().collect();
     let start = if lines.len() > count as usize { lines.len() - count as usize } else { 0 };
     let total_lines = lines.len();
     let mut processed_lines = 0;
@@ -96,7 +98,13 @@ async fn process_last_n_lines(
         process_line(line, regex_pattern, date_format, log_data, no_clear).await?;
         processed_lines += 1;
         progress_callback((processed_lines as f64 / total_lines as f64).min(1.0));
-        *last_processed = Some(start + index);
+        *last_processed = Some(start + index + 1);
+    }
+
+    reader.seek(SeekFrom::Start(0))?;
+    for _ in 0..*last_processed.as_ref().unwrap_or(&0) {
+        let mut line = String::new();
+        reader.read_line(&mut line)?;
     }
 
     Ok(())
