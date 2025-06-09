@@ -11,7 +11,7 @@ use ratatui::{
 use textwrap::wrap;
 use crate::log_data::{LogData, LogEntry};
 use crate::tui_manager::{TuiManager, TEXT_FG_COLOR, HEADER_STYLE};
-use clipboard::{ClipboardContext, ClipboardProvider};
+use arboard::Clipboard;
 
 struct ModalState {
     message: String,
@@ -524,8 +524,8 @@ impl App {
             _ => return,
         };
 
-        if let Ok(mut ctx) = ClipboardContext::new() {
-            if ctx.set_contents(text_to_copy).is_ok() {
+        if let Ok(mut clipboard) = Clipboard::new() {
+            if clipboard.set_text(text_to_copy).is_ok() {
                 self.modal_state = Some(ModalState {
                     message,
                     show_until: Some(Instant::now() + std::time::Duration::from_millis(1500)),
