@@ -438,14 +438,14 @@ impl TuiManager {
     /// Formats the IP list header
     pub fn format_ip_header<'a>(&self) -> ListItem<'a> {
         ListItem::new(format!("{:<15} │ {:<12} │ {}", "IP", "Requests", "Last Update"))
-            .style(PANEL_TITLE_STYLE)
+            .style(Style::new().fg(Color::Rgb(0, 191, 255)).add_modifier(Modifier::BOLD))
     }
 
     /// Formats the URL list header
     pub fn format_url_header<'a>(&self) -> ListItem<'a> {
         ListItem::new(format!("{:<25} │ {:<20} │ {:<10} │ {:<12} │ {}",
             "URL", "Type", "Domain", "Requests", "Last Update"))
-            .style(PANEL_TITLE_STYLE)
+            .style(Style::new().fg(Color::Rgb(0, 191, 255)).add_modifier(Modifier::BOLD))
     }
 
     /// Renders a sparkline graph of requests
