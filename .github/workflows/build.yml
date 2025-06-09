@@ -46,47 +46,47 @@ jobs:
             command: build
 
           - release_for: Linux-arm
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: arm-unknown-linux-musleabi
             command: build
 
           - release_for: Linux-powerpc
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: powerpc-unknown-linux-gnu
             command: build
 
           - release_for: Linux-powerpc64
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: powerpc64-unknown-linux-gnu
             command: build
 
           - release_for: Linux-powerpc64le
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: powerpc64le-unknown-linux-gnu
             command: build
 
           - release_for: Linux-riscv64
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: riscv64gc-unknown-linux-gnu
             command: build
 
           - release_for: Linux-s390x
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: s390x-unknown-linux-gnu
             command: build
 
           - release_for: Linux-aarch64
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             command: build
 
           - release_for: Linux-x86_64
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             command: build
 
           - release_for: Linux-i686
-            os: ubuntu-20.04
+            os: ubuntu-22.04
             target: i686-unknown-linux-musl
             command: build
 
