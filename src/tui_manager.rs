@@ -71,114 +71,35 @@ impl TuiManager {
     }
 
     pub fn draw_sparkline<'a>(&self, data: &'a [u64], title: &'a str) -> Sparkline<'a> {
+        // Разделяем заголовок на основную часть и статистику
+        let parts: Vec<&str> = title.split(" (").collect();
+        let main_title = parts[0];
+        let stats = if parts.len() > 1 {
+            format!("({}", parts[1])
+        } else {
+            String::new()
+        };
+
+        // Создаем блок с закругленными углами и стильным заголовком
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(ratatui::widgets::BorderType::Rounded)
+            .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+            .title(format!("{} {}", main_title, stats))
+            .title_alignment(ratatui::layout::Alignment::Center);
+
+        // Настраиваем стиль графика
+        let style = Style::new()
+            .fg(Color::Rgb(0, 191, 255))  // Яркий голубой цвет для линии
+            .bg(Color::Rgb(28, 28, 28));  // Темный фон
+
         Sparkline::default()
-            .block(Block::default().borders(Borders::ALL).title(title))
+            .block(block)
             .data(data)
             .direction(ratatui::widgets::RenderDirection::RightToLeft)
-            .style(Style::default().fg(Color::Cyan))
-    }
-
-    pub fn draw_pagination<'a>(&self, pages: Vec<String>, selected: usize) -> Tabs<'a> {
-        Tabs::new(pages)
-            .select(selected)
-            .block(Block::default().borders(Borders::ALL).title("Pages"))
-            .highlight_style(Style::default().fg(Color::Yellow))
-            .divider("|")
-    }
-
-    pub fn draw_heatmap<'a>(
-        &'a self,
-        cells: Vec<Rectangle>,
-        x_labels: Vec<(f64, String)>,
-        y_labels: Vec<(f64, String)>,
-    ) -> Canvas<'a, impl Fn(&mut ratatui::widgets::canvas::Context) + 'a> {
-        Canvas::default()
-            .marker(Marker::HalfBlock)
-            .block(Block::default()
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
-                .title("Heatmap (Requests by Hour)")
-                .title_alignment(ratatui::layout::Alignment::Center))
-            .x_bounds([0.0, 25.5])  // 24 hours + space for labels
-            .y_bounds([0.0, y_labels.len() as f64 + 1.0])  // Number of unique dates + space for labels
-            .paint(move |ctx| {
-                // Рисуем сетку
-                for hour in 0..24 {
-                    let x = hour as f64 + 1.3;
-                    ctx.draw(&Rectangle {
-                        x,
-                        y: 0.0,
-                        width: 0.8,
-                        height: y_labels.len() as f64 + 1.0,
-                        color: Color::Rgb(40, 40, 40),
-                    });
-                }
-
-                // Рисуем подписи часов
-                for label in &x_labels {
-                    ctx.print(label.0, 0.0, Line::from(label.1.clone())
-                        .style(Style::new()
-                            .fg(Color::Rgb(144, 238, 144))
-                            .add_modifier(Modifier::BOLD)));
-                }
-
-                // Рисуем подписи дат
-                for label in &y_labels {
-                    ctx.print(0.0, label.0, Line::from(label.1.clone())
-                        .style(Style::new()
-                            .fg(Color::Rgb(144, 238, 144))
-                            .add_modifier(Modifier::BOLD)));
-                }
-
-                // Рисуем ячейки тепловой карты
-                for cell in &cells {
-                    ctx.draw(cell);
-                }
-
-                // Добавляем легенду
-                let legend_y = y_labels.len() as f64 + 1.5;
-                let legend_text = "Legend: Low → High";
-                ctx.print(1.0, legend_y, Line::from(legend_text)
-                    .style(Style::new()
-                        .fg(Color::Rgb(144, 238, 144))
-                        .add_modifier(Modifier::BOLD)));
-
-                // Рисуем градиент легенды
-                for i in 0..20 {
-                    let x = 20.0 + i as f64 * 0.3;
-                    let normalized_value = i as f64 / 19.0;
-                    let (r, g, b) = self.get_heatmap_color(normalized_value);
-                    ctx.draw(&Rectangle {
-                        x,
-                        y: legend_y,
-                        width: 0.3,
-                        height: 0.5,
-                        color: Color::Rgb(r, g, b),
-                    });
-                }
-            })
-    }
-
-    /// Генерирует цвет для тепловой карты на основе нормализованного значения
-    fn get_heatmap_color(&self, normalized_value: f64) -> (u8, u8, u8) {
-        if normalized_value < 0.5 {
-            // От синего к зеленому
-            let t = normalized_value * 2.0;
-            (
-                0,
-                (t * 255.0) as u8,
-                ((1.0 - t) * 255.0) as u8,
-            )
-        } else {
-            // От зеленого к красному
-            let t = (normalized_value - 0.5) * 2.0;
-            (
-                (t * 255.0) as u8,
-                ((1.0 - t) * 255.0) as u8,
-                0,
-            )
-        }
+            .style(style)
+            .bar_set(ratatui::symbols::bar::NINE_LEVELS)  // Используем 9 уровней для более плавного градиента
+            .max(*data.iter().max().unwrap_or(&1))
     }
 
     /// Renders a sparkline graph of requests
@@ -192,15 +113,57 @@ impl TuiManager {
         start_time: i64,
         end_time: i64,
     ) {
-        let sparkline_title = format!(
-            "Requests over last 20 minutes (Min: {}, Max: {}, Start: {}, End: {})",
-            min_value,
-            max_value,
-            start_time,
-            end_time
+        // Форматируем время для отображения
+        let start_dt = Utc.timestamp_opt(start_time, 0).unwrap();
+        let end_dt = Utc.timestamp_opt(end_time, 0).unwrap();
+        let time_range = format!(
+            "{} - {}",
+            start_dt.format("%H:%M:%S"),
+            end_dt.format("%H:%M:%S")
         );
 
-        frame.render_widget(self.draw_sparkline(data, &sparkline_title), area);
+        // Создаем информативный заголовок
+        let sparkline_title = format!(
+            "Requests Timeline | {} | Min: {} | Max: {} | Range: {}",
+            time_range,
+            min_value,
+            max_value,
+            end_dt.signed_duration_since(start_dt).num_seconds()
+        );
+
+        // Разделяем область на график и информационную панель
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(3),
+            ].as_ref())
+            .split(area);
+
+        // Рендерим график
+        frame.render_widget(self.draw_sparkline(data, &sparkline_title), chunks[0]);
+
+        // Добавляем информационную панель с дополнительной статистикой
+        let stats_text = format!(
+            "Total Requests: {} | Avg: {:.1} | Peak: {} | Current: {}",
+            data.iter().sum::<u64>(),
+            data.iter().sum::<u64>() as f64 / data.len() as f64,
+            max_value,
+            data.first().unwrap_or(&0)
+        );
+
+        frame.render_widget(
+            Paragraph::new(stats_text)
+                .style(Style::new()
+                    .fg(Color::Rgb(144, 238, 144))
+                    .add_modifier(Modifier::BOLD))
+                .alignment(ratatui::layout::Alignment::Center)
+                .block(Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))),
+            chunks[1]
+        );
     }
 
     /// Рендерит тепловую карту
@@ -685,5 +648,112 @@ impl TuiManager {
         ListItem::new(format!("{:<25} │ {:<20} │ {:<10} │ {:<12} │ {}",
             "URL", "Type", "Domain", "Requests", "Last Update"))
             .style(Style::new().fg(Color::Rgb(0, 191, 255)).add_modifier(Modifier::BOLD))
+    }
+
+    /// Генерирует цвет для тепловой карты на основе нормализованного значения
+    fn get_heatmap_color(&self, normalized_value: f64) -> (u8, u8, u8) {
+        if normalized_value < 0.5 {
+            // От синего к зеленому
+            let t = normalized_value * 2.0;
+            (
+                0,
+                (t * 255.0) as u8,
+                ((1.0 - t) * 255.0) as u8,
+            )
+        } else {
+            // От зеленого к красному
+            let t = (normalized_value - 0.5) * 2.0;
+            (
+                (t * 255.0) as u8,
+                ((1.0 - t) * 255.0) as u8,
+                0,
+            )
+        }
+    }
+
+    pub fn draw_pagination<'a>(&self, pages: Vec<String>, selected: usize) -> Tabs<'a> {
+        Tabs::new(pages)
+            .select(selected)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                .title("Pages"))
+            .highlight_style(Style::default().fg(Color::Yellow))
+            .divider("|")
+    }
+
+    pub fn draw_heatmap<'a>(
+        &'a self,
+        cells: Vec<Rectangle>,
+        x_labels: Vec<(f64, String)>,
+        y_labels: Vec<(f64, String)>,
+    ) -> Canvas<'a, impl Fn(&mut ratatui::widgets::canvas::Context) + 'a> {
+        Canvas::default()
+            .marker(ratatui::symbols::Marker::HalfBlock)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                .title("Heatmap (Requests by Hour)")
+                .title_alignment(ratatui::layout::Alignment::Center))
+            .x_bounds([0.0, 25.5])  // 24 hours + space for labels
+            .y_bounds([0.0, y_labels.len() as f64 + 1.0])  // Number of unique dates + space for labels
+            .paint(move |ctx| {
+                // Рисуем сетку
+                for hour in 0..24 {
+                    let x = hour as f64 + 1.3;
+                    ctx.draw(&Rectangle {
+                        x,
+                        y: 0.0,
+                        width: 0.8,
+                        height: y_labels.len() as f64 + 1.0,
+                        color: Color::Rgb(40, 40, 40),
+                    });
+                }
+
+                // Рисуем подписи часов
+                for label in &x_labels {
+                    ctx.print(label.0, 0.0, ratatui::text::Line::from(label.1.clone())
+                        .style(Style::new()
+                            .fg(Color::Rgb(144, 238, 144))
+                            .add_modifier(Modifier::BOLD)));
+                }
+
+                // Рисуем подписи дат
+                for label in &y_labels {
+                    ctx.print(0.0, label.0, ratatui::text::Line::from(label.1.clone())
+                        .style(Style::new()
+                            .fg(Color::Rgb(144, 238, 144))
+                            .add_modifier(Modifier::BOLD)));
+                }
+
+                // Рисуем ячейки тепловой карты
+                for cell in &cells {
+                    ctx.draw(cell);
+                }
+
+                // Добавляем легенду
+                let legend_y = y_labels.len() as f64 + 1.5;
+                let legend_text = "Legend: Low → High";
+                ctx.print(1.0, legend_y, ratatui::text::Line::from(legend_text)
+                    .style(Style::new()
+                        .fg(Color::Rgb(144, 238, 144))
+                        .add_modifier(Modifier::BOLD)));
+
+                // Рисуем градиент легенды
+                for i in 0..20 {
+                    let x = 20.0 + i as f64 * 0.3;
+                    let normalized_value = i as f64 / 19.0;
+                    let (r, g, b) = self.get_heatmap_color(normalized_value);
+                    ctx.draw(&Rectangle {
+                        x,
+                        y: legend_y,
+                        width: 0.3,
+                        height: 0.5,
+                        color: Color::Rgb(r, g, b),
+                    });
+                }
+            })
     }
 }
