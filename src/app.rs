@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 use textwrap::wrap;
-use crate::log_data::LogData;
+use crate::log_data::{LogData, LogEntry};
 use crate::tui_manager::{TuiManager, TEXT_FG_COLOR, HEADER_STYLE};
 use clipboard::{ClipboardContext, ClipboardProvider};
 
@@ -215,14 +215,19 @@ impl App {
         let log_data = self.log_data.lock().unwrap();
         let (top_ips, top_urls) = log_data.get_top_n(self.top_n);
 
-        // Format list items
-        let ip_items: Vec<ListItem> = top_ips.iter().map(|(ip, entry)| {
-            self.tui_manager.format_ip_item(ip, entry, self.overview_panel == 0)
-        }).collect();
+        let ip_items: Vec<ListItem> = top_ips
+            .iter()
+            .map(|(ip, entry)| {
+                self.tui_manager.format_ip_item(ip, entry, self.top_ip_list_state.selected().is_some())
+            })
+            .collect();
 
-        let url_items: Vec<ListItem> = top_urls.iter().map(|(url, entry)| {
-            self.tui_manager.format_url_item(url, entry, self.overview_panel == 1)
-        }).collect();
+        let url_items: Vec<(ListItem, &LogEntry)> = top_urls
+            .into_iter()
+            .map(|(url, entry)| {
+                (self.tui_manager.format_url_item(&url, entry, self.top_url_list_state.selected().is_some()), entry)
+            })
+            .collect();
 
         // Use TuiManager to draw the overview
         self.tui_manager.draw_overview(
@@ -411,6 +416,10 @@ impl App {
             0 => {
                 if self.overview_panel > 0 {
                     self.overview_panel -= 1;
+                    if self.overview_panel == 0 {
+                        self.top_url_list_state.select(None);
+                        self.top_ip_list_state.select(Some(0));
+                    }
                 }
             }
             1 => {
@@ -433,6 +442,10 @@ impl App {
             0 => {
                 if self.overview_panel < 1 {
                     self.overview_panel += 1;
+                    if self.overview_panel == 1 {
+                        self.top_ip_list_state.select(None);
+                        self.top_url_list_state.select(Some(0));
+                    }
                 }
             }
             1 => {

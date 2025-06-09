@@ -7,6 +7,7 @@ pub struct LogEntry {
     pub last_requests: Vec<String>,
     pub request_type: String,
     pub request_domain: String,
+    pub full_url: String,
 }
 
 pub struct LogData {
@@ -39,7 +40,7 @@ impl LogData {
         let now = SystemTime::now();
 
         self.update_ip_entry(ip, log_line.clone(), now, request_type.clone(), request_domain.clone());
-        self.update_url_entry(url, log_line, now, request_type, request_domain);
+        self.update_url_entry(url.clone(), log_line, now, request_type, request_domain, url);
 
         self.total_requests += 1;
 
@@ -67,6 +68,7 @@ impl LogData {
             request_domain: request_domain.clone(),
             last_update: now,
             last_requests: Vec::new(),
+            full_url: String::new(),
         });
 
         entry.count += 1;
@@ -88,6 +90,7 @@ impl LogData {
         now: SystemTime,
         request_type: String,
         request_domain: String,
+        full_url: String,
     ) {
         let entry = self.by_url.entry(url).or_insert_with(|| LogEntry {
             count: 0,
@@ -95,10 +98,12 @@ impl LogData {
             request_domain: request_domain.clone(),
             last_update: now,
             last_requests: Vec::new(),
+            full_url: full_url.clone(),
         });
 
         entry.count += 1;
         entry.last_update = now;
+        entry.full_url = full_url;
         
         // Add new request to the beginning of the list
         entry.last_requests.insert(0, log_line);

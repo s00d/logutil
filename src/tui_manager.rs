@@ -183,32 +183,49 @@ impl TuiManager {
         Rect::new(x, y, popup_width, popup_height)
     }
 
+    /// Truncates URL with ellipsis if it's too long
+    fn truncate_url(&self, url: &str, max_length: usize) -> String {
+        if url.len() <= max_length {
+            return url.to_string();
+        }
+        format!("{}...", &url[..max_length-3])
+    }
+
     /// Renders the overview panel with IP and URL lists
     pub fn draw_overview<'a>(
         &self,
         frame: &mut Frame,
         area: Rect,
         ip_items: Vec<ListItem<'a>>,
-        url_items: Vec<ListItem<'a>>,
+        url_items: Vec<(ListItem<'a>, &'a LogEntry)>,
         _overview_panel: usize,
         ip_list_state: &mut ListState,
         url_list_state: &mut ListState,
     ) {
-        // Draw overview with two panels side by side
+        // Разделяем область на основную часть и панель для полного URL
         let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(3) // Высота панели для полного URL
+            ].as_ref())
+            .split(area);
+
+        // Разделяем основную часть на две колонки
+        let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(30),
                 Constraint::Percentage(70)
             ].as_ref())
-            .split(area);
+            .split(chunks[0]);
 
         // Добавляем заголовки в начало списков
         let mut ip_items_with_header = vec![self.format_ip_header()];
         ip_items_with_header.extend(ip_items);
 
-        let mut url_items_with_header = vec![self.format_url_header()];
-        url_items_with_header.extend(url_items);
+        let mut url_items_with_header: Vec<(ListItem<'a>, Option<&'a LogEntry>)> = vec![(self.format_url_header(), None)];
+        url_items_with_header.extend(url_items.into_iter().map(|(item, entry)| (item, Some(entry))));
 
         // Корректируем выделение для IP списка, учитывая заголовок
         let ip_selected = ip_list_state.selected().map(|idx| idx + 1);
@@ -234,13 +251,13 @@ impl TuiManager {
                     .title("IP List")
                     .title_style(Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)))
                 .highlight_style(SELECTED_ITEM_STYLE),
-            chunks[0],
+            main_chunks[0],
             &mut adjusted_ip_state
         );
 
         // Draw URL list
         frame.render_stateful_widget(
-            List::new(url_items_with_header.clone())
+            List::new(url_items_with_header.iter().map(|(item, _)| item.clone()).collect::<Vec<ListItem>>())
                 .block(Block::default()
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
@@ -248,13 +265,33 @@ impl TuiManager {
                     .title("URL List")
                     .title_style(Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)))
                 .highlight_style(SELECTED_ITEM_STYLE),
-            chunks[1],
+            main_chunks[1],
             &mut adjusted_url_state
         );
 
         // Draw scrollbars
-        self.draw_scrollbar(ip_items_with_header.len(), adjusted_ip_state.selected().unwrap_or(0), frame, chunks[0]);
-        self.draw_scrollbar(url_items_with_header.len(), adjusted_url_state.selected().unwrap_or(0), frame, chunks[1]);
+        self.draw_scrollbar(ip_items_with_header.len(), adjusted_ip_state.selected().unwrap_or(0), frame, main_chunks[0]);
+        self.draw_scrollbar(url_items_with_header.len(), adjusted_url_state.selected().unwrap_or(0), frame, main_chunks[1]);
+
+        // Отображаем полный URL в нижней панели, если URL выбран
+        if let Some(idx) = adjusted_url_state.selected() {
+            if idx > 0 { // Пропускаем заголовок
+                if let Some((_, entry_opt)) = url_items_with_header.get(idx) {
+                    if let Some(entry) = entry_opt {
+                        frame.render_widget(
+                            Paragraph::new(entry.full_url.as_str())
+                                .block(Block::default()
+                                    .borders(Borders::ALL)
+                                    .border_type(ratatui::widgets::BorderType::Rounded)
+                                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                                    .title("Full URL"))
+                                .style(Style::new().fg(Color::White)),
+                            chunks[1]
+                        );
+                    }
+                }
+            }
+        }
 
         // Обновляем оригинальные состояния
         if let Some(idx) = adjusted_ip_state.selected() {
@@ -430,8 +467,16 @@ impl TuiManager {
         let last_update = entry.last_update.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
         let last_update_str = format!("{}", Local.timestamp_opt(last_update as i64, 0).unwrap().format("%Y-%m-%d %H:%M:%S"));
         let style = if is_active { ACTIVE_PANEL_STYLE } else { INACTIVE_PANEL_STYLE };
+        
+        // Обрезаем URL если он слишком длинный
+        let truncated_url = self.truncate_url(url, 25);
+        
         ListItem::new(format!("{:<25} │ {:<20} │ {:<10} │ {:<12} │ {}", 
-            url, entry.request_type, entry.request_domain, entry.count, last_update_str))
+            truncated_url, 
+            entry.request_type, 
+            entry.request_domain, 
+            entry.count, 
+            last_update_str))
             .style(style)
     }
 
