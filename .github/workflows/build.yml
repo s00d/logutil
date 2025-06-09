@@ -111,7 +111,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
+          sudo apt-get install -y musl-tools python3 python3-pip
           sudo ln -s /usr/bin/musl-gcc /usr/local/bin/x86_64-linux-musl-gcc
           sudo ln -s /usr/bin/musl-gcc /usr/local/bin/musl-gcc
 
