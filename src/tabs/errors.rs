@@ -2,20 +2,25 @@ use crate::log_data::LogData;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
 
 pub struct ErrorsTab {
-    list_state: ListState,
+    table_state: TableState,
 }
 
 impl ErrorsTab {
     pub fn new() -> Self {
-        Self {
-            list_state: ListState::default(),
-        }
+        let mut instance = Self {
+            table_state: TableState::default(),
+        };
+        
+        // Инициализируем выделение
+        instance.table_state.select(Some(0));
+        
+        instance
     }
 
     fn draw_errors_tab(&self, frame: &mut Frame, area: Rect, log_data: &LogData) {
@@ -45,7 +50,7 @@ impl ErrorsTab {
         );
 
         // Error codes list
-        let items: Vec<ListItem> = top_errors
+        let items: Vec<Row> = top_errors
             .iter()
             .map(|(code, count)| {
                 let error_type = match code {
@@ -53,26 +58,45 @@ impl ErrorsTab {
                     500..=599 => "Server Error",
                     _ => "Other Error",
                 };
-                ListItem::new(format!(
-                    "{:<10} │ {:<15} │ {:<10} │ {}",
-                    code, error_type, count, "occurrences"
-                ))
-                .style(Style::new().fg(Color::Rgb(255, 0, 255)))
+                Row::new(vec![
+                    Cell::from(code.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // Code - желтый, жирный
+                    Cell::from(error_type).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Type - голубой
+                    Cell::from(count.to_string()).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Count - розовый
+                    Cell::from("occurrences").style(Style::new().fg(Color::Rgb(144, 238, 144))), // Text - зеленый
+                ])
             })
             .collect();
 
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Code").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
+            Cell::from("Type").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
+            Cell::from("Count").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
+            Cell::from("Description").style(Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)),
+        ]).style(
+            Style::new()
+                .fg(Color::Rgb(0, 191, 255))
+                .add_modifier(Modifier::BOLD)
+        );
+
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(Style::new().fg(Color::Rgb(255, 0, 255)))
-                        .title("Error Codes"),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(items, [
+                Constraint::Length(10), // Code
+                Constraint::Length(15), // Type
+                Constraint::Length(10), // Count
+                Constraint::Min(15),    // Description
+            ])
+            .header(header)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(255, 0, 255)))
+                    .title("Error Codes"),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[1],
-            &mut self.list_state.clone(),
+            &mut self.table_state.clone(),
         );
     }
 }
@@ -88,14 +112,24 @@ impl super::base::Tab for ErrorsTab {
         self.draw_errors_tab(frame, area, log_data);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, _log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
-                self.list_state.select_previous();
+                if let Some(selected) = self.table_state.selected() {
+                    if selected > 0 {
+                        self.table_state.select(Some(selected - 1));
+                    }
+                }
                 true
             }
             crossterm::event::KeyCode::Down => {
-                self.list_state.select_next();
+                if let Some(selected) = self.table_state.selected() {
+                    // Получаем количество ошибок для определения максимального индекса
+                    let top_errors = log_data.get_top_error_codes();
+                    if selected < top_errors.len().saturating_sub(1) {
+                        self.table_state.select(Some(selected + 1));
+                    }
+                }
                 true
             }
             _ => false,
