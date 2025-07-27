@@ -5,7 +5,7 @@ use chrono::{Local, TimeZone};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState},
+    widgets::{Block, Borders, Cell, List, ListItem, ListState, Row, Table, TableState},
     Frame,
 };
 use std::time::SystemTime;
@@ -15,33 +15,38 @@ use textwrap::wrap;
 struct DrawDetailedRequestsParams<'a, 'b> {
     frame: &'a mut Frame<'b>,
     area: Rect,
-    ip_items: Vec<ListItem<'a>>,
+    ip_rows: Vec<Row<'a>>,
     request_items: Vec<ListItem<'a>>,
     selected_ip: Option<String>,
-    ip_list_state: &'a mut ListState,
+    ip_table_state: &'a mut TableState,
     request_list_state: &'a mut ListState,
 }
 
 pub struct DetailedTab {
     tui_manager: TuiManager,
-    ip_list_state: ListState,
+    ip_table_state: TableState,
     request_list_state: ListState,
     top_n: usize,
 }
 
 impl DetailedTab {
     pub fn new() -> Self {
-        Self {
+        let mut instance = Self {
             tui_manager: TuiManager::new(),
-            ip_list_state: ListState::default(),
+            ip_table_state: TableState::default(),
             request_list_state: ListState::default(),
             top_n: 10,
-        }
+        };
+        
+        // Инициализируем выделение для IP таблицы
+        instance.ip_table_state.select(Some(0));
+        
+        instance
     }
 
     pub fn copy_selected_to_clipboard(&self, log_data: &LogData) -> Option<String> {
         // Если выбран IP
-        if let Some(ip_index) = self.ip_list_state.selected() {
+        if let Some(ip_index) = self.ip_table_state.selected() {
             let top_ips = log_data.get_top_n(self.top_n).0;
             if let Some((ip, _)) = top_ips.get(ip_index) {
                 if let Ok(mut clipboard) = Clipboard::new() {
@@ -55,7 +60,7 @@ impl DetailedTab {
 
         // Если выбран запрос
         if let Some(request_index) = self.request_list_state.selected() {
-            if let Some(ip_index) = self.ip_list_state.selected() {
+            if let Some(ip_index) = self.ip_table_state.selected() {
                 let top_ips = log_data.get_top_n(self.top_n).0;
                 if let Some((ip, _)) = top_ips.get(ip_index) {
                     let last_requests = log_data.get_last_requests(ip);
@@ -82,8 +87,8 @@ impl DetailedTab {
         None
     }
 
-    /// Formats an IP list item
-    fn format_ip_item<'a>(&self, ip: &str, entry: &LogEntry, is_active: bool) -> ListItem<'a> {
+    /// Formats an IP table row
+    fn format_ip_item(&self, ip: &str, entry: &LogEntry, _is_active: bool) -> Row {
         let last_update = entry
             .last_update
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -96,18 +101,12 @@ impl DetailedTab {
                 .unwrap()
                 .format("%Y-%m-%d %H:%M:%S")
         );
-        let style = if is_active {
-            Style::new()
-                .fg(Color::Rgb(144, 238, 144))
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::new().fg(Color::Rgb(169, 169, 169))
-        };
-        ListItem::new(format!(
-            "{:<15} │ {:<12} │ {}",
-            ip, entry.count, last_update_str
-        ))
-        .style(style)
+
+        Row::new(vec![
+            Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
+            Cell::from(entry.count.to_string()).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Requests - голубой
+            Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Last Update - розовый
+        ])
     }
 
     /// Renders the detailed requests panel
@@ -117,17 +116,16 @@ impl DetailedTab {
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
             .split(params.area);
 
-        // Добавляем заголовки в начало списков
-        let mut ip_items_with_header = vec![ListItem::new(format!(
-            "{:<15} │ {:<12} │ {}",
-            "IP", "Requests", "Last Update"
-        ))
-        .style(
+        // Создаем заголовок для IP таблицы
+        let ip_header = Row::new(vec![
+            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
+            Cell::from("Requests").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
+            Cell::from("Last Update").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
+        ]).style(
             Style::new()
                 .fg(Color::Rgb(0, 191, 255))
-                .add_modifier(Modifier::BOLD),
-        )];
-        ip_items_with_header.extend(params.ip_items);
+                .add_modifier(Modifier::BOLD)
+        );
 
         let mut request_items_with_header = vec![];
         let has_ip_header = params.selected_ip.is_some();
@@ -137,9 +135,9 @@ impl DetailedTab {
         }
         request_items_with_header.extend(params.request_items);
 
-        // Корректируем выделение для IP списка, учитывая заголовок
-        let ip_selected = params.ip_list_state.selected().map(|idx| idx + 1);
-        let mut adjusted_ip_state = ListState::default();
+        // Корректируем выделение для IP таблицы
+        let ip_selected = params.ip_table_state.selected();
+        let mut adjusted_ip_state = TableState::default();
         if let Some(idx) = ip_selected {
             adjusted_ip_state.select(Some(idx));
         }
@@ -154,22 +152,27 @@ impl DetailedTab {
             adjusted_request_state.select(Some(idx));
         }
 
-        // Draw IP list
+        // Draw IP table
         params.frame.render_stateful_widget(
-            List::new(ip_items_with_header.clone())
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
-                        .title("IP List")
-                        .title_style(
-                            Style::new()
-                                .fg(Color::Rgb(144, 238, 144))
-                                .add_modifier(Modifier::BOLD),
-                        ),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(params.ip_rows.clone(), [
+                Constraint::Length(15),  // IP
+                Constraint::Length(12),  // Requests
+                Constraint::Min(20),     // Last Update
+            ])
+            .header(ip_header)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                    .title("IP List")
+                    .title_style(
+                        Style::new()
+                            .fg(Color::Rgb(144, 238, 144))
+                            .add_modifier(Modifier::BOLD),
+                    ),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[0],
             &mut adjusted_ip_state,
         );
@@ -196,7 +199,7 @@ impl DetailedTab {
 
         // Draw scrollbars
         self.tui_manager.draw_scrollbar(
-            ip_items_with_header.len(),
+            params.ip_rows.len(),
             adjusted_ip_state.selected().unwrap_or(0),
             params.frame,
             chunks[0],
@@ -210,11 +213,9 @@ impl DetailedTab {
 
         // Обновляем оригинальные состояния
         if let Some(idx) = adjusted_ip_state.selected() {
-            if idx > 0 {
-                params.ip_list_state.select(Some(idx - 1));
-            } else {
-                params.ip_list_state.select(None);
-            }
+            params.ip_table_state.select(Some(idx));
+        } else {
+            params.ip_table_state.select(None);
         }
         if let Some(idx) = adjusted_request_state.selected() {
             let offset = if params.selected_ip.is_some() { 1 } else { 0 };
@@ -233,9 +234,9 @@ impl DetailedTab {
     }
 
     fn on_right(&mut self, log_data: &LogData) {
-        if self.ip_list_state.selected().is_some() {
+        if self.ip_table_state.selected().is_some() {
             // Проверяем, есть ли IP в данных
-            if let Some(selected_ip_idx) = self.ip_list_state.selected() {
+            if let Some(selected_ip_idx) = self.ip_table_state.selected() {
                 let top_ips = log_data.get_top_n(self.top_n).0;
                 if let Some((_ip, _)) = top_ips.get(selected_ip_idx) {
                     // Если IP существует в данных, то переключаемся на правую панель
@@ -257,15 +258,15 @@ impl super::base::Tab for DetailedTab {
         let mut top_ips = log_data.get_top_n(self.top_n).0;
         top_ips.sort_by(|a, b| b.1.count.cmp(&a.1.count));
 
-        let ip_items: Vec<ListItem> = top_ips
+        let ip_items: Vec<Row> = top_ips
             .iter()
             .map(|(ip, entry)| {
-                self.format_ip_item(ip, entry, self.ip_list_state.selected().is_some())
+                self.format_ip_item(ip, entry, self.ip_table_state.selected().is_some())
             })
             .collect();
 
         let selected_ip = self
-            .ip_list_state
+            .ip_table_state
             .selected()
             .and_then(|i| top_ips.get(i).map(|(ip, _)| ip.clone()));
 
@@ -281,20 +282,20 @@ impl super::base::Tab for DetailedTab {
         }
 
         // Клонируем состояния для избежания конфликта заимствований
-        let mut ip_list_state_clone = self.ip_list_state.clone();
+        let mut ip_table_state_clone = self.ip_table_state.clone();
         let mut request_list_state_clone = self.request_list_state.clone();
 
         self.draw_detailed_requests(DrawDetailedRequestsParams {
             frame,
             area,
-            ip_items,
+            ip_rows: ip_items,
             request_items,
             selected_ip,
-            ip_list_state: &mut ip_list_state_clone,
+            ip_table_state: &mut ip_table_state_clone,
             request_list_state: &mut request_list_state_clone,
         });
 
-        self.ip_list_state = ip_list_state_clone;
+        self.ip_table_state = ip_table_state_clone;
         self.request_list_state = request_list_state_clone;
     }
 
@@ -304,7 +305,11 @@ impl super::base::Tab for DetailedTab {
                 if self.request_list_state.selected().is_some() {
                     self.request_list_state.select_previous();
                 } else {
-                    self.ip_list_state.select_previous();
+                    if let Some(selected) = self.ip_table_state.selected() {
+                        if selected > 0 {
+                            self.ip_table_state.select(Some(selected - 1));
+                        }
+                    }
                 }
                 true
             }
@@ -312,7 +317,13 @@ impl super::base::Tab for DetailedTab {
                 if self.request_list_state.selected().is_some() {
                     self.request_list_state.select_next();
                 } else {
-                    self.ip_list_state.select_next();
+                    if let Some(selected) = self.ip_table_state.selected() {
+                        // Получаем количество IP для определения максимального индекса
+                        let top_ips = log_data.get_top_n(self.top_n).0;
+                        if selected < top_ips.len().saturating_sub(1) {
+                            self.ip_table_state.select(Some(selected + 1));
+                        }
+                    }
                 }
                 true
             }
