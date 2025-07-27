@@ -2,23 +2,28 @@ use crate::log_data::LogData;
 use crate::tui_manager::HEADER_STYLE;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
 
 pub struct PerformanceTab {
-    list_state: ListState,
+    table_state: TableState,
 }
 
 impl PerformanceTab {
     pub fn new() -> Self {
-        Self {
-            list_state: ListState::default(),
-        }
+        let mut instance = Self {
+            table_state: TableState::default(),
+        };
+        
+        // Инициализируем выделение
+        instance.table_state.select(Some(0));
+        
+        instance
     }
 
-    fn draw_performance_tab(&self, frame: &mut Frame, area: Rect, log_data: &LogData) {
+    fn draw_performance_tab(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
         let (avg_time, max_time, min_time, total_size) = log_data.get_performance_summary();
         let slow_requests = log_data.get_slow_requests(); // Requests slower than 1 second
         let requests_per_second = log_data.get_requests_per_second();
@@ -46,24 +51,43 @@ impl PerformanceTab {
         );
 
         // Slow requests list with detailed tracking
-        let items: Vec<ListItem> = slow_requests
+        let items: Vec<Row> = slow_requests
             .iter()
             .take(10)
             .map(|(ip, time)| {
-                ListItem::new(format!("{:<15} │ {:.2}s", ip, time))
-                    .style(Style::new().fg(Color::Rgb(255, 165, 0)))
+                Row::new(vec![
+                    Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
+                    Cell::from(format!("{:.2}s", time)).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Time - голубой
+                ])
             })
             .collect();
 
-        frame.render_widget(
-            List::new(items).block(
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
+            Cell::from("Time").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
+        ]).style(
+            Style::new()
+                .fg(Color::Rgb(0, 191, 255))
+                .add_modifier(Modifier::BOLD)
+        );
+
+        frame.render_stateful_widget(
+            Table::new(items, [
+                Constraint::Length(15), // IP
+                Constraint::Length(10), // Time
+            ])
+            .header(header)
+            .block(
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::new().fg(Color::Rgb(255, 165, 0)))
                     .title("Slow Requests (Top 10)"),
-            ),
-            area,
+            )
+            .row_highlight_style(Style::new().fg(Color::Rgb(255, 165, 0))),
+            chunks[1],
+            &mut self.table_state,
         );
     }
 }
@@ -79,14 +103,25 @@ impl super::base::Tab for PerformanceTab {
         self.draw_performance_tab(frame, area, log_data);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, _log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
-                self.list_state.select_previous();
+                if let Some(selected) = self.table_state.selected() {
+                    if selected > 0 {
+                        self.table_state.select(Some(selected - 1));
+                    }
+                }
                 true
             }
             crossterm::event::KeyCode::Down => {
-                self.list_state.select_next();
+                if let Some(selected) = self.table_state.selected() {
+                    // Получаем количество медленных запросов для определения максимального индекса
+                    let slow_requests = log_data.get_slow_requests();
+                    let max_items = slow_requests.len().min(10);
+                    if selected < max_items.saturating_sub(1) {
+                        self.table_state.select(Some(selected + 1));
+                    }
+                }
                 true
             }
             _ => false,
