@@ -131,7 +131,7 @@ async fn process_last_n_lines(
     } else {
         0
     };
-    let total_lines = lines.len();
+    let total_lines = count as usize; // Используем count вместо общего количества строк
     let mut processed_lines = 0;
 
     for (index, line) in lines[start..].iter().enumerate() {
