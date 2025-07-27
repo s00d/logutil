@@ -140,7 +140,8 @@ impl DetailedTab {
         ])
         .style(
             Style::new()
-                .fg(Color::Rgb(0, 191, 255))
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
                 .add_modifier(Modifier::BOLD),
         );
 
