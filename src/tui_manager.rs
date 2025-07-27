@@ -8,8 +8,8 @@ use ratatui::{
     Frame,
 };
 
-/// Function to display simple progress bar in console
-pub fn draw_simple_progress_bar(progress: f64) {
+/// Function to display simple progress bar in console with text
+pub fn draw_simple_progress_bar_with_text(progress: f64, text: &str) {
     let bar_length = 50;
     let filled_length = (progress * bar_length as f64) as usize;
     let empty_length = bar_length - filled_length;
@@ -18,7 +18,11 @@ pub fn draw_simple_progress_bar(progress: f64) {
     let empty = "░".repeat(empty_length);
     let percentage = (progress * 100.0) as usize;
 
-    eprint!("\r[{}] {}%", filled + &empty, percentage);
+    if text.is_empty() {
+        eprint!("\r[{}] {}%", filled + &empty, percentage);
+    } else {
+        eprint!("\r[{}] {}% | {}", filled + &empty, percentage, text);
+    }
 }
 
 /// Function to hide progress bar (clears the line)
