@@ -1,5 +1,8 @@
+<div align="center">
+
 ![Logo](https://github.com/s00d/logutil/blob/main/assets/logo.png?raw=true)
 
+</div>
 # LogUtil - Real-time Nginx Log Analyzer
 
 <div align="center">
