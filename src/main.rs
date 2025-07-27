@@ -21,7 +21,7 @@ use crate::file_selector::{FileSelector, FileSelectorAction};
 use crate::helpers::tail_file;
 use crate::log_data::LogData;
 use crate::settings::{CliArgs, Settings, SettingsAction};
-use crate::tui_manager::{draw_simple_progress_bar, hide_progress_bar};
+use crate::tui_manager::{draw_simple_progress_bar_with_text, hide_progress_bar};
 use anyhow::{Context, Result};
 use env_logger::Builder;
 use log::{error, LevelFilter};
@@ -309,7 +309,18 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
 
     // First read the file
     let progress_callback = |progress: f64| {
-        draw_simple_progress_bar(progress);
+        let log_data = log_data_clone.lock().unwrap();
+        let (unique_ips, unique_urls) = log_data.get_unique_counts();
+        let total_requests = log_data.get_total_requests();
+        let text = format!(
+            "Processed: {} lines | IPs: {} | URLs: {} | Requests: {}",
+            log_data.get_total_lines(),
+            unique_ips,
+            unique_urls,
+            total_requests
+        );
+        drop(log_data); // Освобождаем блокировку
+        draw_simple_progress_bar_with_text(progress, &text);
     };
     let last_processed_line: Option<usize> = None;
 
