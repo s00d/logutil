@@ -2,13 +2,13 @@ use crate::log_data::LogData;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table, TableState},
     Frame,
 };
 
 pub struct SecurityTab {
-    list_state: ListState,
+    table_state: TableState,
     log_detail_state: ListState,
     show_log_detail: bool,
     input: String,
@@ -17,13 +17,18 @@ pub struct SecurityTab {
 
 impl SecurityTab {
     pub fn new() -> Self {
-        Self {
-            list_state: ListState::default(),
+        let mut instance = Self {
+            table_state: TableState::default(),
             log_detail_state: ListState::default(),
             show_log_detail: false,
             input: String::new(),
             active_panel: 0, // Начинаем с левой панели
-        }
+        };
+        
+        // Инициализируем выделение для таблицы
+        instance.table_state.select(Some(0));
+        
+        instance
     }
 
     fn draw_security_tab(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
@@ -116,7 +121,7 @@ impl SecurityTab {
                 .collect()
         };
 
-        let items: Vec<ListItem> = filtered_suspicious
+        let rows: Vec<Row> = filtered_suspicious
             .iter()
             .map(|(ip, count)| {
                 let patterns = log_data.get_suspicious_patterns_for_ip(ip);
@@ -132,13 +137,28 @@ impl SecurityTab {
                     "LOW" => "🟢",
                     _ => "⚪",
                 };
-                ListItem::new(format!(
-                    "{} {:<15} │ {:<10} │ {:<8} │ {}",
-                    threat_icon, ip, count, threat_level, pattern_text
-                ))
-                .style(Style::new().fg(Color::Rgb(255, 165, 0)))
+                Row::new(vec![
+                    Cell::from(threat_icon),
+                    Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
+                    Cell::from(count.to_string()).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Count - голубой
+                    Cell::from(threat_level.to_string()).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Threat - розовый
+                    Cell::from(pattern_text).style(Style::new().fg(Color::Rgb(144, 238, 144))), // Patterns - зеленый
+                ])
             })
             .collect();
+
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Level").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
+            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
+            Cell::from("Count").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
+            Cell::from("Threat").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
+            Cell::from("Patterns").style(Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)),
+        ]).style(
+            Style::new()
+                .fg(Color::Rgb(0, 191, 255))
+                .add_modifier(Modifier::BOLD)
+        );
 
         let border_style = if self.active_panel == 0 && !self.show_log_detail {
             Style::new().fg(Color::Rgb(255, 255, 0)) // Желтый для активной панели
@@ -147,20 +167,27 @@ impl SecurityTab {
         };
 
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(border_style)
-                        .title(format!(
-                            "Suspicious IPs - Total: {}",
-                            filtered_suspicious.len()
-                        )),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(rows, [
+                Constraint::Length(4),   // Level (icon)
+                Constraint::Length(15),  // IP
+                Constraint::Length(10),  // Count
+                Constraint::Length(8),   // Threat
+                Constraint::Min(20),     // Patterns
+            ])
+            .header(header)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(border_style)
+                    .title(format!(
+                        "Suspicious IPs - Total: {}",
+                        filtered_suspicious.len()
+                    )),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.list_state,
+            &mut self.table_state,
         );
     }
 
@@ -388,7 +415,7 @@ impl SecurityTab {
     }
 
     fn get_selected_ip(&self, log_data: &LogData) -> Option<String> {
-        if let Some(selected) = self.list_state.selected() {
+        if let Some(selected) = self.table_state.selected() {
             let top_suspicious = log_data.get_top_suspicious_ips();
             let filtered_suspicious = if self.input.is_empty() {
                 top_suspicious
@@ -456,13 +483,17 @@ impl super::base::Tab for SecurityTab {
         self.draw_security_tab(frame, area, log_data);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, _log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 if self.show_log_detail {
                     self.log_detail_state.select_previous();
                 } else if self.active_panel == 0 {
-                    self.list_state.select_previous();
+                    if let Some(selected) = self.table_state.selected() {
+                        if selected > 0 {
+                            self.table_state.select(Some(selected - 1));
+                        }
+                    }
                 } else {
                     self.log_detail_state.select_previous();
                 }
@@ -472,31 +503,48 @@ impl super::base::Tab for SecurityTab {
                 if self.show_log_detail {
                     self.log_detail_state.select_next();
                 } else if self.active_panel == 0 {
-                    self.list_state.select_next();
+                    if let Some(selected) = self.table_state.selected() {
+                        // Получаем количество подозрительных IP для определения максимального индекса
+                        let top_suspicious = log_data.get_top_suspicious_ips();
+                        let filtered_suspicious = if self.input.is_empty() {
+                            top_suspicious.to_owned()
+                        } else {
+                            top_suspicious
+                                .iter()
+                                .filter(|(ip, _)| ip.to_lowercase().contains(&self.input.to_lowercase()))
+                                .cloned()
+                                .collect()
+                        };
+                        
+                        if selected < filtered_suspicious.len().saturating_sub(1) {
+                            self.table_state.select(Some(selected + 1));
+                        }
+                    }
                 } else {
                     self.log_detail_state.select_next();
                 }
                 true
             }
             crossterm::event::KeyCode::Left => {
-                if !self.show_log_detail {
-                    self.active_panel = 0; // Переключаемся на левую панель
+                if self.active_panel > 0 {
+                    self.active_panel -= 1;
                 }
                 true
             }
             crossterm::event::KeyCode::Right => {
-                if !self.show_log_detail {
-                    self.active_panel = 1; // Переключаемся на правую панель
+                if self.active_panel < 1 {
+                    self.active_panel += 1;
                 }
                 true
             }
             crossterm::event::KeyCode::Enter => {
                 if !self.show_log_detail {
                     self.show_log_detail = true;
+                    self.log_detail_state.select(Some(0));
                 }
                 true
             }
-            crossterm::event::KeyCode::Char('q') => {
+            crossterm::event::KeyCode::Esc => {
                 if self.show_log_detail {
                     self.show_log_detail = false;
                 }
@@ -504,14 +552,14 @@ impl super::base::Tab for SecurityTab {
             }
             crossterm::event::KeyCode::Backspace => {
                 if self.active_panel == 0 {
-                    self.list_state.select(None);
+                    self.table_state.select(None);
                     self.input.pop();
                 }
                 true
             }
             crossterm::event::KeyCode::Char(c) => {
                 if self.active_panel == 0 {
-                    self.list_state.select(None);
+                    self.table_state.select(None);
                     self.input.push(c);
                 }
                 true
