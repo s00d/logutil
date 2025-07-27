@@ -3,7 +3,7 @@ use crate::tui_manager::{TuiManager, PANEL_TITLE_STYLE, SELECTED_ITEM_STYLE, TEX
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Tabs},
     Frame,
 };
 
@@ -11,16 +11,16 @@ use ratatui::{
 struct DrawLastRequestsParams<'a, 'b> {
     frame: &'a mut Frame<'b>,
     area: Rect,
-    items: Vec<ListItem<'a>>,
+    rows: Vec<Row<'a>>,
     input: &'a str,
     current_page: usize,
     total_pages: usize,
-    list_state: &'a mut ListState,
+    table_state: &'a mut TableState,
 }
 
 pub struct RequestsTab {
     tui_manager: TuiManager,
-    list_state: ListState,
+    table_state: TableState,
     input: String,
     current_page: usize,
     total_pages: usize,
@@ -28,13 +28,18 @@ pub struct RequestsTab {
 
 impl RequestsTab {
     pub fn new() -> Self {
-        Self {
+        let mut instance = Self {
             tui_manager: TuiManager::new(),
-            list_state: ListState::default(),
+            table_state: TableState::default(),
             input: String::new(),
             current_page: 0,
             total_pages: 0,
-        }
+        };
+        
+        // Инициализируем выделение
+        instance.table_state.select(Some(0));
+        
+        instance
     }
 
     /// Renders the last requests panel with search and pagination
@@ -83,22 +88,24 @@ impl RequestsTab {
 
         // Request list
         params.frame.render_stateful_widget(
-            List::new(params.items.clone())
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
-                        .title("Requests"),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(params.rows.clone(), [
+                Constraint::Min(50), // Request content
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                    .title("Requests"),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[1],
-            params.list_state,
+            params.table_state,
         );
 
         self.tui_manager.draw_scrollbar(
-            params.items.len(),
-            params.list_state.selected().unwrap_or(0),
+            params.rows.len(),
+            params.table_state.selected().unwrap_or(0),
             params.frame,
             chunks[1],
         );
@@ -124,19 +131,19 @@ impl RequestsTab {
     fn on_left(&mut self) {
         if self.current_page > 0 {
             self.current_page -= 1;
-            self.list_state.select_first()
+            self.table_state.select(Some(0));
         }
     }
 
     fn on_right(&mut self) {
-        if self.current_page < self.total_pages - 1 {
+        if self.total_pages > 0 && self.current_page < self.total_pages - 1 {
             self.current_page += 1;
-            self.list_state.select_first()
+            self.table_state.select(Some(0));
         }
     }
 
     pub fn copy_selected_to_clipboard(&self, log_data: &LogData) -> Option<String> {
-        if let Some(selected_index) = self.list_state.selected() {
+        if let Some(selected_index) = self.table_state.selected() {
             let search_results = self.get_search_results(log_data);
             let start = self.current_page * 100;
             let end = (start + 100).min(search_results.len());
@@ -169,39 +176,59 @@ impl super::base::Tab for RequestsTab {
         let start = self.current_page * 100;
         let end = (start + 100).min(search_results.len());
 
-        let items: Vec<ListItem> = search_results[start..end]
+        let rows: Vec<Row> = search_results[start..end]
             .iter()
             .map(|request| {
-                let wrapped_text = textwrap::wrap(request, (area.width as f64 * 0.7) as usize - 5);
-                ListItem::new(wrapped_text.join("\n")).style(Style::default().fg(TEXT_FG_COLOR))
+                // Обрезаем запрос для отображения в таблице
+                let max_length = (area.width as f64 * 0.7) as usize - 5;
+                let display_text = if request.len() > max_length {
+                    format!("{}...", &request[..max_length])
+                } else {
+                    request.to_string()
+                };
+                Row::new(vec![Cell::from(display_text).style(Style::default().fg(TEXT_FG_COLOR))])
             })
             .collect();
 
         // Обновляем total_pages для использования в on_right
         self.total_pages = total_pages;
 
-        // Клонируем list_state для избежания конфликта заимствований
-        let mut list_state_clone = self.list_state.clone();
+        // Клонируем table_state для избежания конфликта заимствований
+        let mut table_state_clone = self.table_state.clone();
         self.draw_last_requests(DrawLastRequestsParams {
             frame,
             area,
-            items,
+            rows,
             input: &self.input,
             current_page: self.current_page,
             total_pages,
-            list_state: &mut list_state_clone,
+            table_state: &mut table_state_clone,
         });
-        self.list_state = list_state_clone;
+        self.table_state = table_state_clone;
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, _log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
-                self.list_state.select_previous();
+                if let Some(selected) = self.table_state.selected() {
+                    if selected > 0 {
+                        self.table_state.select(Some(selected - 1));
+                    }
+                }
                 true
             }
             crossterm::event::KeyCode::Down => {
-                self.list_state.select_next();
+                if let Some(selected) = self.table_state.selected() {
+                    // Получаем количество результатов для определения максимального индекса
+                    let search_results = self.get_search_results(log_data);
+                    let start = self.current_page * 100;
+                    let end = (start + 100).min(search_results.len());
+                    let page_items = end - start;
+                    
+                    if selected < page_items.saturating_sub(1) {
+                        self.table_state.select(Some(selected + 1));
+                    }
+                }
                 true
             }
             crossterm::event::KeyCode::Left => {
@@ -213,12 +240,12 @@ impl super::base::Tab for RequestsTab {
                 true
             }
             crossterm::event::KeyCode::Backspace => {
-                self.list_state.select(None);
+                self.table_state.select(None);
                 self.input.pop();
                 true
             }
             crossterm::event::KeyCode::Char(c) => {
-                self.list_state.select(None);
+                self.table_state.select(None);
                 self.input.push(c);
                 true
             }
