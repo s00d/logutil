@@ -9,8 +9,8 @@ use crate::tui_manager::{draw_tui_progress_bar, TuiManager, HEADER_STYLE};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    widgets::{Block, Borders},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Cell, Row, Table},
     Frame,
 };
 use std::sync::{Arc, Mutex as StdMutex};
@@ -244,16 +244,30 @@ impl App {
         );
 
         // Возвращаем использование draw_summary
+        let (requests, ips, urls, update) = self.get_summary_text();
+
+        // Создаем таблицу с разными цветами
+        let summary_row = Row::new(vec![
+            Cell::from(format!("Requests: {}", requests)).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // Желтый
+            Cell::from(format!("Unique IPs: {}", ips)).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Голубой
+            Cell::from(format!("Unique URLs: {}", urls)).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Розовый
+            Cell::from(format!("Update: {}", update)).style(Style::new().fg(Color::Rgb(144, 238, 144))), // Зеленый
+        ]);
+
         frame.render_widget(
-            TuiManager::new()
-                .draw_summary(&self.get_summary_text())
-                .style(HEADER_STYLE)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(Style::new().fg(Color::Rgb(144, 238, 144))),
-                ),
+            Table::new(vec![summary_row], [
+                Constraint::Length(20), // Requests
+                Constraint::Length(20), // IPs
+                Constraint::Length(20), // URLs
+                Constraint::Min(30),    // Update
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                    .title("Summary"),
+            ),
             header_chunks[1],
         );
 
@@ -280,19 +294,18 @@ impl App {
         }
     }
 
-    fn get_summary_text(&self) -> String {
+    fn get_summary_text(&self) -> (String, String, String, String) {
         let log_data = self
             .log_data
             .lock()
             .expect("Failed to acquire log data lock for summary");
         let (unique_ips, unique_urls) = log_data.get_unique_counts();
         let now = chrono::Local::now();
-        format!(
-            "Requests: {} | Unique IPs: {} | Unique URLs: {} | Update: {}",
-            log_data.total_requests,
-            unique_ips,
-            unique_urls,
-            now.format("%Y-%m-%d %H:%M:%S")
+        (
+            format!("{}", log_data.total_requests),
+            format!("{}", unique_ips),
+            format!("{}", unique_urls),
+            format!("{}", now.format("%Y-%m-%d %H:%M:%S"))
         )
     }
 
