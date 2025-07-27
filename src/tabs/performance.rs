@@ -16,10 +16,10 @@ impl PerformanceTab {
         let mut instance = Self {
             table_state: TableState::default(),
         };
-        
+
         // Инициализируем выделение
         instance.table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -56,27 +56,44 @@ impl PerformanceTab {
             .take(10)
             .map(|(ip, time)| {
                 Row::new(vec![
-                    Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
-                    Cell::from(format!("{:.2}s", time)).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Time - голубой
+                    Cell::from(ip.to_string()).style(
+                        Style::new()
+                            .fg(Color::Rgb(255, 255, 0))
+                            .add_modifier(Modifier::BOLD),
+                    ), // IP - желтый, жирный
+                    Cell::from(format!("{:.2}s", time))
+                        .style(Style::new().fg(Color::Rgb(0, 255, 255))), // Time - голубой
                 ])
             })
             .collect();
 
         // Создаем заголовок для таблицы
         let header = Row::new(vec![
-            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Time").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("IP").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Time").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(0, 191, 255))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         frame.render_stateful_widget(
-            Table::new(items, [
-                Constraint::Length(15), // IP
-                Constraint::Length(10), // Time
-            ])
+            Table::new(
+                items,
+                [
+                    Constraint::Length(15), // IP
+                    Constraint::Length(10), // Time
+                ],
+            )
             .header(header)
             .block(
                 Block::default()

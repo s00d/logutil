@@ -16,10 +16,10 @@ impl BotsTab {
         let mut instance = Self {
             table_state: TableState::default(),
         };
-        
+
         // Инициализируем выделение
         instance.table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -54,7 +54,11 @@ impl BotsTab {
             .iter()
             .map(|(bot_type, count)| {
                 Row::new(vec![
-                    Cell::from(bot_type.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // Type - желтый, жирный
+                    Cell::from(bot_type.to_string()).style(
+                        Style::new()
+                            .fg(Color::Rgb(255, 255, 0))
+                            .add_modifier(Modifier::BOLD),
+                    ), // Type - желтый, жирный
                     Cell::from(count.to_string()).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Count - голубой
                     Cell::from("Bot Activity").style(Style::new().fg(Color::Rgb(255, 182, 193))), // Activity - розовый
                 ])
@@ -63,21 +67,37 @@ impl BotsTab {
 
         // Создаем заголовок для таблицы
         let header = Row::new(vec![
-            Cell::from("Type").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Count").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
-            Cell::from("Activity").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("Type").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Count").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Activity").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(0, 191, 255))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         frame.render_stateful_widget(
-            Table::new(items, [
-                Constraint::Length(20), // Type
-                Constraint::Length(10), // Count
-                Constraint::Min(15),    // Activity
-            ])
+            Table::new(
+                items,
+                [
+                    Constraint::Length(20), // Type
+                    Constraint::Length(10), // Count
+                    Constraint::Min(15),    // Activity
+                ],
+            )
             .header(header)
             .block(
                 Block::default()

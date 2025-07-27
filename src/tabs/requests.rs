@@ -35,10 +35,10 @@ impl RequestsTab {
             current_page: 0,
             total_pages: 0,
         };
-        
+
         // Инициализируем выделение
         instance.table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -88,9 +88,12 @@ impl RequestsTab {
 
         // Request list
         params.frame.render_stateful_widget(
-            Table::new(params.rows.clone(), [
-                Constraint::Min(50), // Request content
-            ])
+            Table::new(
+                params.rows.clone(),
+                [
+                    Constraint::Min(50), // Request content
+                ],
+            )
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -186,7 +189,9 @@ impl super::base::Tab for RequestsTab {
                 } else {
                     request.to_string()
                 };
-                Row::new(vec![Cell::from(display_text).style(Style::default().fg(TEXT_FG_COLOR))])
+                Row::new(vec![
+                    Cell::from(display_text).style(Style::default().fg(TEXT_FG_COLOR))
+                ])
             })
             .collect();
 
@@ -224,7 +229,7 @@ impl super::base::Tab for RequestsTab {
                     let start = self.current_page * 100;
                     let end = (start + 100).min(search_results.len());
                     let page_items = end - start;
-                    
+
                     if selected < page_items.saturating_sub(1) {
                         self.table_state.select(Some(selected + 1));
                     }

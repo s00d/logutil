@@ -23,10 +23,10 @@ impl HeatmapTab {
             weekly_table_state: TableState::default(),
             active_panel: 0,
         };
-        
+
         // Инициализируем выделение для первой панели
         instance.hourly_table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -87,11 +87,14 @@ impl HeatmapTab {
             .collect();
 
         frame.render_stateful_widget(
-            Table::new(items, [
-                Constraint::Length(20),   // Time
-                Constraint::Length(20),  // Bar
-                Constraint::Length(10),  // Count
-            ])
+            Table::new(
+                items,
+                [
+                    Constraint::Length(20), // Time
+                    Constraint::Length(20), // Bar
+                    Constraint::Length(10), // Count
+                ],
+            )
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -145,11 +148,14 @@ impl HeatmapTab {
             .collect();
 
         frame.render_stateful_widget(
-            Table::new(items, [
-                Constraint::Length(20),  // Time - увеличиваем для даты
-                Constraint::Length(20),  // Bar
-                Constraint::Length(10),  // Count
-            ])
+            Table::new(
+                items,
+                [
+                    Constraint::Length(20), // Time - увеличиваем для даты
+                    Constraint::Length(20), // Bar
+                    Constraint::Length(10), // Count
+                ],
+            )
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -203,11 +209,14 @@ impl HeatmapTab {
             .collect();
 
         frame.render_stateful_widget(
-            Table::new(items, [
-                Constraint::Length(20),  // Time - увеличиваем для недели
-                Constraint::Length(20),  // Bar
-                Constraint::Length(10),  // Count
-            ])
+            Table::new(
+                items,
+                [
+                    Constraint::Length(20), // Time - увеличиваем для недели
+                    Constraint::Length(20), // Bar
+                    Constraint::Length(10), // Count
+                ],
+            )
             .block(
                 Block::default()
                     .borders(Borders::ALL)

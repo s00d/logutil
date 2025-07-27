@@ -16,10 +16,10 @@ impl ErrorsTab {
         let mut instance = Self {
             table_state: TableState::default(),
         };
-        
+
         // Инициализируем выделение
         instance.table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -59,7 +59,11 @@ impl ErrorsTab {
                     _ => "Other Error",
                 };
                 Row::new(vec![
-                    Cell::from(code.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // Code - желтый, жирный
+                    Cell::from(code.to_string()).style(
+                        Style::new()
+                            .fg(Color::Rgb(255, 255, 0))
+                            .add_modifier(Modifier::BOLD),
+                    ), // Code - желтый, жирный
                     Cell::from(error_type).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Type - голубой
                     Cell::from(count.to_string()).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Count - розовый
                     Cell::from("occurrences").style(Style::new().fg(Color::Rgb(144, 238, 144))), // Text - зеленый
@@ -69,23 +73,43 @@ impl ErrorsTab {
 
         // Создаем заголовок для таблицы
         let header = Row::new(vec![
-            Cell::from("Code").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Type").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
-            Cell::from("Count").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
-            Cell::from("Description").style(Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("Code").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Type").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Count").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Description").style(
+                Style::new()
+                    .fg(Color::Rgb(144, 238, 144))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(0, 191, 255))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         frame.render_stateful_widget(
-            Table::new(items, [
-                Constraint::Length(10), // Code
-                Constraint::Length(15), // Type
-                Constraint::Length(10), // Count
-                Constraint::Min(15),    // Description
-            ])
+            Table::new(
+                items,
+                [
+                    Constraint::Length(10), // Code
+                    Constraint::Length(15), // Type
+                    Constraint::Length(10), // Count
+                    Constraint::Min(15),    // Description
+                ],
+            )
             .header(header)
             .block(
                 Block::default()

@@ -24,10 +24,10 @@ impl SecurityTab {
             input: String::new(),
             active_panel: 0, // Начинаем с левой панели
         };
-        
+
         // Инициализируем выделение для таблицы
         instance.table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -139,9 +139,14 @@ impl SecurityTab {
                 };
                 Row::new(vec![
                     Cell::from(threat_icon),
-                    Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
+                    Cell::from(ip.to_string()).style(
+                        Style::new()
+                            .fg(Color::Rgb(255, 255, 0))
+                            .add_modifier(Modifier::BOLD),
+                    ), // IP - желтый, жирный
                     Cell::from(count.to_string()).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Count - голубой
-                    Cell::from(threat_level.to_string()).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Threat - розовый
+                    Cell::from(threat_level.to_string())
+                        .style(Style::new().fg(Color::Rgb(255, 182, 193))), // Threat - розовый
                     Cell::from(pattern_text).style(Style::new().fg(Color::Rgb(144, 238, 144))), // Patterns - зеленый
                 ])
             })
@@ -149,15 +154,36 @@ impl SecurityTab {
 
         // Создаем заголовок для таблицы
         let header = Row::new(vec![
-            Cell::from("Level").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Count").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
-            Cell::from("Threat").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
-            Cell::from("Patterns").style(Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("Level").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("IP").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Count").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Threat").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Patterns").style(
+                Style::new()
+                    .fg(Color::Rgb(144, 238, 144))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(0, 191, 255))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         let border_style = if self.active_panel == 0 && !self.show_log_detail {
@@ -167,13 +193,16 @@ impl SecurityTab {
         };
 
         frame.render_stateful_widget(
-            Table::new(rows, [
-                Constraint::Length(4),   // Level (icon)
-                Constraint::Length(15),  // IP
-                Constraint::Length(10),  // Count
-                Constraint::Length(8),   // Threat
-                Constraint::Min(20),     // Patterns
-            ])
+            Table::new(
+                rows,
+                [
+                    Constraint::Length(4),  // Level (icon)
+                    Constraint::Length(15), // IP
+                    Constraint::Length(10), // Count
+                    Constraint::Length(8),  // Threat
+                    Constraint::Min(20),    // Patterns
+                ],
+            )
             .header(header)
             .block(
                 Block::default()
@@ -511,11 +540,13 @@ impl super::base::Tab for SecurityTab {
                         } else {
                             top_suspicious
                                 .iter()
-                                .filter(|(ip, _)| ip.to_lowercase().contains(&self.input.to_lowercase()))
+                                .filter(|(ip, _)| {
+                                    ip.to_lowercase().contains(&self.input.to_lowercase())
+                                })
                                 .cloned()
                                 .collect()
                         };
-                        
+
                         if selected < filtered_suspicious.len().saturating_sub(1) {
                             self.table_state.select(Some(selected + 1));
                         }

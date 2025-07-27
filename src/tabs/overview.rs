@@ -6,8 +6,8 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     widgets::{
-        Block, Borders, Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Table, TableState,
+        Block, Borders, Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Table, TableState,
     },
     Frame,
 };
@@ -28,10 +28,10 @@ impl OverviewTab {
             overview_panel: 0,
             top_n: 10,
         };
-        
+
         // Инициализируем выделение для первой панели
         instance.top_ip_table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -40,19 +40,12 @@ impl OverviewTab {
 
         let ip_items: Vec<Row> = top_ips
             .iter()
-            .map(|(ip, entry)| {
-                self.format_ip_item(ip, entry)
-            })
+            .map(|(ip, entry)| self.format_ip_item(ip, entry))
             .collect();
 
         let url_items: Vec<(Row, &LogEntry)> = top_urls
             .into_iter()
-            .map(|(url, entry)| {
-                (
-                    self.format_url_item(&url, entry),
-                    entry,
-                )
-            })
+            .map(|(url, entry)| (self.format_url_item(&url, entry), entry))
             .collect();
 
         // Разделяем область на основную часть и панель для полного URL
@@ -89,21 +82,37 @@ impl OverviewTab {
 
         // Draw IP list
         let ip_header = Row::new(vec![
-            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Requests").style(Style::new().fg(Color::Rgb(169, 169, 169)).add_modifier(Modifier::BOLD)),
-            Cell::from("Last Update").style(Style::new().fg(Color::Rgb(100, 149, 237)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("IP").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Requests").style(
+                Style::new()
+                    .fg(Color::Rgb(169, 169, 169))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Last Update").style(
+                Style::new()
+                    .fg(Color::Rgb(100, 149, 237))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(105, 105, 105))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         frame.render_stateful_widget(
-            Table::new(ip_items.clone(), [
-                Constraint::Length(15),  // IP
-                Constraint::Length(12),  // Requests
-                Constraint::Min(20),     // Last Update
-            ])
+            Table::new(
+                ip_items.clone(),
+                [
+                    Constraint::Length(15), // IP
+                    Constraint::Length(12), // Requests
+                    Constraint::Min(20),    // Last Update
+                ],
+            )
             .header(ip_header)
             .block(
                 Block::default()
@@ -124,15 +133,36 @@ impl OverviewTab {
 
         // Draw URL list
         let url_header = Row::new(vec![
-            Cell::from("URL").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Type").style(Style::new().fg(Color::Rgb(169, 169, 169)).add_modifier(Modifier::BOLD)),
-            Cell::from("Domain").style(Style::new().fg(Color::Rgb(192, 192, 192)).add_modifier(Modifier::BOLD)),
-            Cell::from("Requests").style(Style::new().fg(Color::Rgb(128, 128, 128)).add_modifier(Modifier::BOLD)),
-            Cell::from("Last Update").style(Style::new().fg(Color::Rgb(100, 149, 237)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("URL").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Type").style(
+                Style::new()
+                    .fg(Color::Rgb(169, 169, 169))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Domain").style(
+                Style::new()
+                    .fg(Color::Rgb(192, 192, 192))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Requests").style(
+                Style::new()
+                    .fg(Color::Rgb(128, 128, 128))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Last Update").style(
+                Style::new()
+                    .fg(Color::Rgb(100, 149, 237))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(105, 105, 105))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         frame.render_stateful_widget(
@@ -229,7 +259,11 @@ impl OverviewTab {
         );
 
         Row::new(vec![
-            Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
+            Cell::from(ip.to_string()).style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ), // IP - желтый, жирный
             Cell::from(entry.count.to_string()).style(Style::new().fg(Color::Rgb(169, 169, 169))), // Requests - темно-серый
             Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(100, 149, 237))), // Last Update - синий
         ])
@@ -252,9 +286,15 @@ impl OverviewTab {
         let truncated_url = self.truncate_url(url, 50);
 
         Row::new(vec![
-            Cell::from(truncated_url).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // URL - желтый, жирный
-            Cell::from(entry.request_type.clone()).style(Style::new().fg(Color::Rgb(169, 169, 169))), // Type - темно-серый
-            Cell::from(entry.request_domain.clone()).style(Style::new().fg(Color::Rgb(192, 192, 192))), // Domain - серебристый
+            Cell::from(truncated_url).style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ), // URL - желтый, жирный
+            Cell::from(entry.request_type.clone())
+                .style(Style::new().fg(Color::Rgb(169, 169, 169))), // Type - темно-серый
+            Cell::from(entry.request_domain.clone())
+                .style(Style::new().fg(Color::Rgb(192, 192, 192))), // Domain - серебристый
             Cell::from(entry.count.to_string()).style(Style::new().fg(Color::Rgb(128, 128, 128))), // Requests - серый
             Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(100, 149, 237))), // Last Update - синий
         ])

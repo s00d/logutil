@@ -37,10 +37,10 @@ impl DetailedTab {
             request_list_state: ListState::default(),
             top_n: 10,
         };
-        
+
         // Инициализируем выделение для IP таблицы
         instance.ip_table_state.select(Some(0));
-        
+
         instance
     }
 
@@ -103,7 +103,11 @@ impl DetailedTab {
         );
 
         Row::new(vec![
-            Cell::from(ip.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // IP - желтый, жирный
+            Cell::from(ip.to_string()).style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ), // IP - желтый, жирный
             Cell::from(entry.count.to_string()).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Requests - голубой
             Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Last Update - розовый
         ])
@@ -118,13 +122,26 @@ impl DetailedTab {
 
         // Создаем заголовок для IP таблицы
         let ip_header = Row::new(vec![
-            Cell::from("IP").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
-            Cell::from("Requests").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
-            Cell::from("Last Update").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
-        ]).style(
+            Cell::from("IP").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Requests").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Last Update").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
             Style::new()
                 .fg(Color::Rgb(0, 191, 255))
-                .add_modifier(Modifier::BOLD)
+                .add_modifier(Modifier::BOLD),
         );
 
         let mut request_items_with_header = vec![];
@@ -154,11 +171,14 @@ impl DetailedTab {
 
         // Draw IP table
         params.frame.render_stateful_widget(
-            Table::new(params.ip_rows.clone(), [
-                Constraint::Length(15),  // IP
-                Constraint::Length(12),  // Requests
-                Constraint::Min(20),     // Last Update
-            ])
+            Table::new(
+                params.ip_rows.clone(),
+                [
+                    Constraint::Length(15), // IP
+                    Constraint::Length(12), // Requests
+                    Constraint::Min(20),    // Last Update
+                ],
+            )
             .header(ip_header)
             .block(
                 Block::default()
