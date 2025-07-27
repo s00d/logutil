@@ -40,12 +40,14 @@ impl OverviewTab {
 
         let ip_items: Vec<Row> = top_ips
             .iter()
-            .map(|(ip, entry)| self.format_ip_item(ip, entry))
+            .enumerate()
+            .map(|(i, (ip, entry))| self.format_ip_item(ip, entry, i))
             .collect();
 
         let url_items: Vec<(Row, &LogEntry)> = top_urls
             .into_iter()
-            .map(|(url, entry)| (self.format_url_item(&url, entry), entry))
+            .enumerate()
+            .map(|(i, (url, entry))| (self.format_url_item(&url, entry, i), entry))
             .collect();
 
         // Разделяем область на основную часть и панель для полного URL
@@ -100,7 +102,8 @@ impl OverviewTab {
         ])
         .style(
             Style::new()
-                .fg(Color::Rgb(105, 105, 105))
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -161,7 +164,8 @@ impl OverviewTab {
         ])
         .style(
             Style::new()
-                .fg(Color::Rgb(105, 105, 105))
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -172,9 +176,9 @@ impl OverviewTab {
                     .map(|(item, _)| item.clone())
                     .collect::<Vec<Row>>(),
                 [
-                    Constraint::Length(50), // URL - увеличено с 25 до 50
+                    Constraint::Length(50), // URL
                     Constraint::Length(20), // Type
-                    Constraint::Length(20), // Domain - увеличено с 10 до 20
+                    Constraint::Length(30), // Domain
                     Constraint::Length(12), // Requests
                     Constraint::Min(20),    // Last Update
                 ],
@@ -211,21 +215,43 @@ impl OverviewTab {
             main_chunks[1],
         );
 
-        // Отображаем полный URL в нижней панели, если URL выбран
-        if let Some(idx) = adjusted_url_state.selected() {
-            if idx < url_items.len() {
-                if let Some((_, entry)) = url_items.get(idx) {
-                    frame.render_widget(
-                        Paragraph::new(entry.full_url.as_str())
-                            .block(
-                                Block::default()
-                                    .borders(Borders::ALL)
-                                    .border_type(ratatui::widgets::BorderType::Rounded)
-                                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144))),
-                            )
-                            .style(Style::default().fg(Color::White)),
-                        chunks[1],
-                    );
+        // Отображаем информацию в нижней панели в зависимости от активной панели
+        if self.overview_panel == 0 {
+            // IP List активна - показываем выбранный IP
+            if let Some(idx) = adjusted_ip_state.selected() {
+                if idx < top_ips.len() {
+                    if let Some((ip, _)) = top_ips.get(idx) {
+                        frame.render_widget(
+                            Paragraph::new(format!("Selected IP: {}", ip))
+                                .block(
+                                    Block::default()
+                                        .borders(Borders::ALL)
+                                        .border_type(ratatui::widgets::BorderType::Rounded)
+                                        .border_style(Style::new().fg(Color::Rgb(144, 238, 144))),
+                                )
+                                .style(Style::default().fg(Color::White)),
+                            chunks[1],
+                        );
+                    }
+                }
+            }
+        } else {
+            // URL List активна - показываем строку лога
+            if let Some(idx) = adjusted_url_state.selected() {
+                if idx < url_items.len() {
+                    if let Some((_, entry)) = url_items.get(idx) {
+                        frame.render_widget(
+                            Paragraph::new(entry.full_url.as_str())
+                                .block(
+                                    Block::default()
+                                        .borders(Borders::ALL)
+                                        .border_type(ratatui::widgets::BorderType::Rounded)
+                                        .border_style(Style::new().fg(Color::Rgb(144, 238, 144))),
+                                )
+                                .style(Style::default().fg(Color::White)),
+                            chunks[1],
+                        );
+                    }
                 }
             }
         }
@@ -244,7 +270,7 @@ impl OverviewTab {
     }
 
     // Методы из TuiManager
-    fn format_ip_item(&self, ip: &str, entry: &LogEntry) -> Row {
+    fn format_ip_item(&self, ip: &str, entry: &LogEntry, _index: usize) -> Row {
         let last_update = entry
             .last_update
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -265,11 +291,11 @@ impl OverviewTab {
                     .add_modifier(Modifier::BOLD),
             ), // IP - желтый, жирный
             Cell::from(entry.count.to_string()).style(Style::new().fg(Color::Rgb(169, 169, 169))), // Requests - темно-серый
-            Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(100, 149, 237))), // Last Update - синий
+            Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(100, 149, 237))), // Last Update - cornflower blue
         ])
     }
 
-    fn format_url_item(&self, url: &str, entry: &LogEntry) -> Row {
+    fn format_url_item(&self, url: &str, entry: &LogEntry, _index: usize) -> Row {
         let last_update = entry
             .last_update
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -283,6 +309,31 @@ impl OverviewTab {
                 .format("%Y-%m-%d %H:%M:%S")
         );
 
+        // Определяем тип запроса
+        let request_type = if url.contains("GET") {
+            "GET"
+        } else if url.contains("POST") {
+            "POST"
+        } else if url.contains("PUT") {
+            "PUT"
+        } else if url.contains("DELETE") {
+            "DELETE"
+        } else {
+            "OTHER"
+        };
+
+        // Извлекаем домен из URL
+        let domain = if let Some(start) = url.find("://") {
+            if let Some(end) = url[start + 3..].find('/') {
+                &url[start + 3..start + 3 + end]
+            } else {
+                &url[start + 3..]
+            }
+        } else {
+            "Unknown"
+        };
+
+        // Обрезаем URL для отображения
         let truncated_url = self.truncate_url(url, 50);
 
         Row::new(vec![
@@ -291,12 +342,10 @@ impl OverviewTab {
                     .fg(Color::Rgb(255, 255, 0))
                     .add_modifier(Modifier::BOLD),
             ), // URL - желтый, жирный
-            Cell::from(entry.request_type.clone())
-                .style(Style::new().fg(Color::Rgb(169, 169, 169))), // Type - темно-серый
-            Cell::from(entry.request_domain.clone())
-                .style(Style::new().fg(Color::Rgb(192, 192, 192))), // Domain - серебристый
+            Cell::from(request_type.to_string()).style(Style::new().fg(Color::Rgb(169, 169, 169))), // Type - темно-серый
+            Cell::from(domain.to_string()).style(Style::new().fg(Color::Rgb(192, 192, 192))), // Domain - серебряный
             Cell::from(entry.count.to_string()).style(Style::new().fg(Color::Rgb(128, 128, 128))), // Requests - серый
-            Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(100, 149, 237))), // Last Update - синий
+            Cell::from(last_update_str).style(Style::new().fg(Color::Rgb(100, 149, 237))), // Last Update - cornflower blue
         ])
     }
 
