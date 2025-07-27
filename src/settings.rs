@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 pub struct Settings {
     selected_file: PathBuf,
     settings: Vec<Setting>,
-    list_state: ListState,
+    table_state: TableState,
     selected_index: usize,
     input_mode: bool,
     current_input: String,
@@ -98,31 +98,36 @@ impl Settings {
             Setting {
                 name: "Enable Bots".to_string(),
                 value: cli_args.enable_bots.to_string(),
-                description: "Enable Bots tab (detect bot traffic and crawlers)".to_string(),
+                description: "Enable Bots tab (detect bot activity and user agents)".to_string(),
                 input_type: InputType::Boolean,
             },
             Setting {
                 name: "Enable Sparkline".to_string(),
                 value: cli_args.enable_sparkline.to_string(),
-                description: "Enable Sparkline tab (real-time request rate visualization)".to_string(),
+                description: "Enable Sparkline tab (show request trends over time)".to_string(),
                 input_type: InputType::Boolean,
             },
             Setting {
                 name: "Enable Heatmap".to_string(),
                 value: cli_args.enable_heatmap.to_string(),
-                description: "Enable Heatmap tab (hourly traffic patterns visualization)".to_string(),
+                description: "Enable Heatmap tab (show request distribution by time)".to_string(),
                 input_type: InputType::Boolean,
             },
         ];
 
-        Self {
+        let mut instance = Self {
             selected_file,
             settings,
-            list_state: ListState::default(),
+            table_state: TableState::default(),
             selected_index: 0,
             input_mode: false,
             current_input: String::new(),
-        }
+        };
+
+        // Инициализируем выделение
+        instance.table_state.select(Some(0));
+
+        instance
     }
 
     pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
@@ -172,7 +177,7 @@ impl Settings {
         }
 
         // Список настроек
-        let mut items: Vec<ListItem> = self
+        let mut rows: Vec<Row> = self
             .settings
             .iter()
             .enumerate()
@@ -221,13 +226,13 @@ impl Settings {
                         }
                     }
                 };
-                let spans = ratatui::text::Line::from(vec![
-                    ratatui::text::Span::styled(format!("{}: ", setting.name), name_style),
-                    ratatui::text::Span::styled(value_display, value_style),
-                ]);
-                ListItem::new(spans)
+                Row::new(vec![
+                    Cell::from(setting.name.clone()).style(name_style),
+                    Cell::from(value_display).style(value_style),
+                ])
             })
             .collect();
+
         // Добавляем пункт запуска анализа
         let start_style = if self.selected_index == self.settings.len() {
             Style::new()
@@ -237,27 +242,54 @@ impl Settings {
         } else {
             Style::new().fg(Color::Yellow)
         };
-        items.push(ListItem::new(ratatui::text::Line::from(vec![
-            ratatui::text::Span::styled("▶ Start Analysis", start_style),
-        ])));
+        rows.push(Row::new(vec![
+            Cell::from("▶ Start Analysis").style(start_style),
+            Cell::from("").style(Style::default()),
+        ]));
+
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Setting").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Value").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
+            Style::new()
+                .fg(Color::Rgb(0, 191, 255))
+                .add_modifier(Modifier::BOLD),
+        );
 
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
-                        .title("Settings"),
-                )
-                .highlight_style(
-                    Style::new()
-                        .fg(Color::Rgb(255, 255, 255))
-                        .bg(Color::Rgb(144, 238, 144))
-                        .add_modifier(Modifier::BOLD),
-                ),
+            Table::new(
+                rows,
+                [
+                    Constraint::Length(30), // Setting
+                    Constraint::Min(20),    // Value
+                ],
+            )
+            .header(header)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                    .title("Settings"),
+            )
+            .row_highlight_style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 255))
+                    .bg(Color::Rgb(144, 238, 144))
+                    .add_modifier(Modifier::BOLD),
+            ),
             chunks[2],
-            &mut self.list_state,
+            &mut self.table_state,
         );
 
         // Подсказки
@@ -328,14 +360,14 @@ impl Settings {
             KeyCode::Up => {
                 if self.selected_index > 0 {
                     self.selected_index -= 1;
-                    self.list_state.select(Some(self.selected_index));
+                    self.table_state.select(Some(self.selected_index));
                 }
                 SettingsAction::Continue
             }
             KeyCode::Down => {
                 if self.selected_index <= self.settings.len() {
                     self.selected_index += 1;
-                    self.list_state.select(Some(self.selected_index));
+                    self.table_state.select(Some(self.selected_index));
                 }
                 SettingsAction::Continue
             }
