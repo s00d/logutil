@@ -248,19 +248,29 @@ impl App {
 
         // Создаем таблицу с разными цветами
         let summary_row = Row::new(vec![
-            Cell::from(format!("Requests: {}", requests)).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // Желтый
-            Cell::from(format!("Unique IPs: {}", ips)).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Голубой
-            Cell::from(format!("Unique URLs: {}", urls)).style(Style::new().fg(Color::Rgb(255, 182, 193))), // Розовый
-            Cell::from(format!("Update: {}", update)).style(Style::new().fg(Color::Rgb(144, 238, 144))), // Зеленый
+            Cell::from(format!("Requests: {}", requests)).style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ), // Желтый
+            Cell::from(format!("Unique IPs: {}", ips))
+                .style(Style::new().fg(Color::Rgb(0, 255, 255))), // Голубой
+            Cell::from(format!("Unique URLs: {}", urls))
+                .style(Style::new().fg(Color::Rgb(255, 182, 193))), // Розовый
+            Cell::from(format!("Update: {}", update))
+                .style(Style::new().fg(Color::Rgb(144, 238, 144))), // Зеленый
         ]);
 
         frame.render_widget(
-            Table::new(vec![summary_row], [
-                Constraint::Length(20), // Requests
-                Constraint::Length(20), // IPs
-                Constraint::Length(20), // URLs
-                Constraint::Min(30),    // Update
-            ])
+            Table::new(
+                vec![summary_row],
+                [
+                    Constraint::Length(20), // Requests
+                    Constraint::Length(20), // IPs
+                    Constraint::Length(20), // URLs
+                    Constraint::Min(30),    // Update
+                ],
+            )
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -305,7 +315,7 @@ impl App {
             format!("{}", log_data.total_requests),
             format!("{}", unique_ips),
             format!("{}", unique_urls),
-            format!("{}", now.format("%Y-%m-%d %H:%M:%S"))
+            format!("{}", now.format("%Y-%m-%d %H:%M:%S")),
         )
     }
 
