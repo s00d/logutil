@@ -1,31 +1,38 @@
 mod app;
-mod log_data;
+mod file_selector;
 mod helpers;
+mod log_data;
+mod settings;
+mod tab_manager;
+mod tabs;
 mod tui_manager;
 
-use ratatui::{
-    backend::CrosstermBackend,
-    Terminal,
-};
+use crate::app::App;
+use app::AppConfig;
+
 use crossterm::{
     event::{self, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::{backend::CrosstermBackend, Terminal};
 
-use std::env;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, mpsc, Mutex};
-use std::time::{Duration};
-use env_logger::Builder;
-use log::{error, LevelFilter};
-use structopt::StructOpt;
-use tokio::time::sleep;
-use crate::app::App;
+use crate::file_selector::{FileSelector, FileSelectorAction};
 use crate::helpers::tail_file;
 use crate::log_data::LogData;
-use anyhow::{Result, Context};
+use crate::settings::{CliArgs, Settings, SettingsAction};
+use crate::tui_manager::{draw_simple_progress_bar, hide_progress_bar};
+use anyhow::{Context, Result};
+use env_logger::Builder;
+use log::{error, LevelFilter};
+use std::env;
+use std::fs::File;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::Duration;
+use structopt::StructOpt;
+use tokio::sync::mpsc;
+use tokio::time::sleep;
 
 #[derive(StructOpt)]
 #[structopt(
@@ -35,9 +42,9 @@ use anyhow::{Result, Context};
     GitHub: https://github.com/s00d/logutil"
 )]
 struct Cli {
-    /// Path to the log file
+    /// Path to the log file (optional - if not provided, file selector will be shown)
     #[structopt(parse(from_os_str))]
-    file: PathBuf,
+    file: Option<PathBuf>,
 
     /// Number of lines to read from the end of the file (0 to start from the end, -1 to read the entire file)
     #[structopt(short = "c", long, default_value = "0")]
@@ -52,20 +59,12 @@ struct Cli {
     regex: String,
 
     /// Date format to parse the log entries
-    #[structopt(
-        short = "d",
-        long,
-        default_value = "%d/%b/%Y:%H:%M:%S %z"
-    )]
+    #[structopt(short = "d", long, default_value = "%d/%b/%Y:%H:%M:%S %z")]
     date_format: String,
 
     /// Number of top entries to display
     #[structopt(short, long, default_value = "10")]
     top: usize,
-
-    /// Disable clearing of outdated entries
-    #[structopt(long)]
-    no_clear: bool,
 
     /// Show top URLs in console
     #[structopt(long)]
@@ -78,21 +77,211 @@ struct Cli {
     /// Enable logging to a file
     #[structopt(long)]
     log_to_file: bool,
+
+    /// Enable Security tab (detect suspicious activity, attacks, etc.)
+    #[structopt(long)]
+    enable_security: bool,
+
+    /// Enable Performance tab (monitor response times, slow requests)
+    #[structopt(long)]
+    enable_performance: bool,
+
+    /// Enable Errors tab (track error codes and failed requests)
+    #[structopt(long)]
+    enable_errors: bool,
+
+    /// Enable Bots tab (detect bot traffic and crawlers)
+    #[structopt(long)]
+    enable_bots: bool,
+
+    /// Enable Sparkline tab (real-time request rate visualization)
+    #[structopt(long)]
+    enable_sparkline: bool,
+
+    /// Enable Heatmap tab (hourly traffic patterns visualization)
+    #[structopt(long)]
+    enable_heatmap: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Cli::from_args();
 
+    // Если файл не указан или указана пустая строка, запускаем интерактивный режим
+    if args.file.is_none()
+        || args
+            .file
+            .as_ref()
+            .expect("File path should be Some when checking")
+            .to_string_lossy()
+            .trim()
+            .is_empty()
+    {
+        return run_interactive_mode(args).await;
+    }
+
+    let file_path = args
+        .file
+        .expect("File path should be Some after validation");
+
+    // Проверяем существование файла
+    if !file_path.exists() {
+        error!("File does not exist: {}", file_path.display());
+        return Err(anyhow::anyhow!(
+            "File does not exist: {}",
+            file_path.display()
+        ));
+    }
+
+    // Создаем CliArgs для передачи в run_analysis_with_args
+    let cli_args = CliArgs {
+        file: Some(file_path),
+        regex: args.regex,
+        date_format: args.date_format,
+        count: args.count,
+        top: args.top,
+        show_urls: args.show_urls,
+        show_ips: args.show_ips,
+        log_to_file: args.log_to_file,
+        enable_security: args.enable_security,
+        enable_performance: args.enable_performance,
+        enable_errors: args.enable_errors,
+        enable_bots: args.enable_bots,
+        enable_sparkline: args.enable_sparkline,
+        enable_heatmap: args.enable_heatmap,
+    };
+
+    run_analysis_with_args(cli_args).await
+}
+
+async fn run_interactive_mode(args: Cli) -> Result<()> {
+    // Инициализируем логирование
     if env::args().any(|arg| arg == "-h" || arg == "--help") {
         return Ok(());
     }
 
-    if let Err(e) = env::set_current_dir(env::current_dir().expect("Failed to get current directory")) {
+    if let Err(e) =
+        env::set_current_dir(env::current_dir().expect("Failed to get current directory"))
+    {
         error!("Failed to set current directory: {:?}", e);
     }
 
-    if args.log_to_file {
+    // Создаем начальные CLI аргументы из переданных параметров
+    let initial_cli_args = CliArgs {
+        file: Some(PathBuf::new()),
+        regex: args.regex,
+        date_format: args.date_format,
+        count: args.count,
+        top: args.top,
+        show_urls: args.show_urls,
+        show_ips: args.show_ips,
+        log_to_file: args.log_to_file,
+        enable_security: args.enable_security,
+        enable_performance: args.enable_performance,
+        enable_errors: args.enable_errors,
+        enable_bots: args.enable_bots,
+        enable_sparkline: args.enable_sparkline,
+        enable_heatmap: args.enable_heatmap,
+    };
+
+    let mut current_mode = InteractiveMode::FileSelector;
+    let mut file_selector = FileSelector::new();
+    let mut settings: Option<Settings> = None;
+
+    enable_raw_mode().context("Failed to enable raw mode")?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
+
+    terminal.clear().context("Failed to clear terminal")?;
+
+    loop {
+        terminal
+            .draw(|f| match current_mode {
+                InteractiveMode::FileSelector => {
+                    file_selector.draw(f, f.area());
+                }
+                InteractiveMode::Settings => {
+                    if let Some(ref mut settings_ref) = settings {
+                        settings_ref.draw(f, f.area());
+                    }
+                }
+            })
+            .context("Failed to draw terminal")?;
+
+        if event::poll(Duration::from_millis(100)).context("Failed to poll events")? {
+            if let Event::Key(key) = event::read().context("Failed to read event")? {
+                match current_mode {
+                    InteractiveMode::FileSelector => {
+                        match file_selector.handle_input(key) {
+                            FileSelectorAction::Continue => {}
+                            FileSelectorAction::FileSelected(file_path) => {
+                                // Создаем Settings с текущими CLI аргументами
+                                let current_cli_args = if let Some(ref settings_ref) = settings {
+                                    settings_ref.get_cli_args()
+                                } else {
+                                    initial_cli_args.clone()
+                                };
+                                settings =
+                                    Some(Settings::new_with_args(file_path, &current_cli_args));
+                                current_mode = InteractiveMode::Settings;
+                            }
+                            FileSelectorAction::Cancel => {
+                                break;
+                            }
+                            FileSelectorAction::Exit => {
+                                // Восстанавливаем терминал перед выходом
+                                disable_raw_mode().context("Failed to disable raw mode")?;
+                                execute!(terminal.backend_mut(), LeaveAlternateScreen)
+                                    .context("Failed to leave alternate screen")?;
+                                terminal.show_cursor().context("Failed to show cursor")?;
+                                return Ok(());
+                            }
+                        }
+                    }
+                    InteractiveMode::Settings => {
+                        let mut back = false;
+                        if let Some(settings_ref) = settings.as_mut() {
+                            match settings_ref.handle_input(key) {
+                                SettingsAction::Continue => {}
+                                SettingsAction::Back => {
+                                    current_mode = InteractiveMode::FileSelector;
+                                    back = true;
+                                }
+                                SettingsAction::StartAnalysis(cli_args) => {
+                                    return run_analysis_with_args(cli_args).await;
+                                }
+                                SettingsAction::Exit => {
+                                    // Восстанавливаем терминал перед выходом
+                                    disable_raw_mode().context("Failed to disable raw mode")?;
+                                    execute!(terminal.backend_mut(), LeaveAlternateScreen)
+                                        .context("Failed to leave alternate screen")?;
+                                    terminal.show_cursor().context("Failed to show cursor")?;
+                                    return Ok(());
+                                }
+                            }
+                        }
+                        if back {
+                            settings = None;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    disable_raw_mode().context("Failed to disable raw mode")?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)
+        .context("Failed to leave alternate screen")?;
+    terminal.show_cursor().context("Failed to show cursor")?;
+
+    Ok(())
+}
+
+async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
+    // Инициализируем логирование если нужно
+    if cli_args.log_to_file {
         let log_file = File::create("app.log").context("Unable to create log file")?;
         Builder::new()
             .filter(None, LevelFilter::Info)
@@ -103,128 +292,196 @@ async fn main() -> Result<()> {
         env_logger::init();
     }
 
-    let file_path = args.file.clone();
-    let count = args.count;
-    let regex_pattern = if Path::new(&args.regex).exists() {
-        fs::read_to_string(&args.regex).context("Could not read regex file")?
-    } else {
-        args.regex.clone()
-    };
-    let date_format = args.date_format.clone();
-    let top_n = args.top;
-    let no_clear = args.no_clear;
+    let count = cli_args.count;
+    let regex_pattern = cli_args.regex.clone();
+    let date_format = cli_args.date_format.clone();
+    let _top_n = cli_args.top;
 
-    let log_data = Arc::new(Mutex::new(LogData::new()));
+    let log_data = Arc::new(StdMutex::new(LogData::with_enabled_tabs(
+        cli_args.enable_security,
+        cli_args.enable_performance,
+        cli_args.enable_errors,
+        cli_args.enable_bots,
+        cli_args.enable_sparkline,
+        cli_args.enable_heatmap,
+    )));
     let log_data_clone = Arc::clone(&log_data);
 
     // First read the file
     let progress_callback = |progress: f64| {
-        eprint!("\rReading file: {:.1}%", progress * 100.0);
+        draw_simple_progress_bar(progress);
     };
-    tail_file(&file_path, count, &regex_pattern, &date_format, &log_data_clone, no_clear, None, progress_callback)
-        .await
-        .context("Error reading file")?;
+    let last_processed_line: Option<usize> = None;
 
-    // Output statistics to console if requested
-    if args.show_urls || args.show_ips {
-        let log_data = log_data.lock().unwrap();
-        let (top_ips, top_urls) = log_data.get_top_n(args.top);
-        let (unique_ips, unique_urls) = log_data.get_unique_counts();
+    let file_path = cli_args
+        .file
+        .as_ref()
+        .expect("File path should be Some when checking");
+    match tail_file(
+        file_path,
+        count,
+        &regex_pattern,
+        &date_format,
+        &log_data_clone,
+        last_processed_line,
+        progress_callback,
+    )
+    .await
+    {
+        Ok(_last_line) => {
+            eprintln!(); // Новая строка после прогресса
+            hide_progress_bar(); // Скрываем прогресс-бар
+                                 // Output statistics to console if requested
+            if cli_args.show_urls || cli_args.show_ips {
+                let log_data = log_data
+                    .lock()
+                    .expect("Failed to acquire log data lock for statistics");
+                let (top_ips, top_urls) = log_data.get_top_n(cli_args.top);
+                let (unique_ips, unique_urls) = log_data.get_unique_counts();
 
-        if args.show_urls {
-            println!("\nTop {} URLs (total unique: {}):", args.top, unique_urls);
-            println!("{:<50} | {:<10} | {:<10}", "URL", "Requests", "Type");
-            println!("{:-<50}-+-{:-<10}-+-{:-<10}", "", "", "");
-            for (url, entry) in top_urls {
-                println!("{:<50} | {:<10} | {:<10}", 
-                    url,
-                    entry.count,
-                    entry.request_type
-                );
-            }
-        }
-
-        if args.show_ips {
-            println!("\nTop {} IPs (total unique: {}):", args.top, unique_ips);
-            println!("{:<15} | {:<10} | {:<10}", "IP", "Requests", "Type");
-            println!("{:-<15}-+-{:-<10}-+-{:-<10}", "", "", "");
-            for (ip, entry) in top_ips {
-                println!("{:<15} | {:<10} | {:<10}", 
-                    ip,
-                    entry.count,
-                    entry.request_type
-                );
-            }
-        }
-        return Ok(());
-    }
-
-    // Если не запрошен вывод статистики, запускаем TUI
-    enable_raw_mode().context("Failed to enable raw mode")?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
-
-    terminal.clear().context("Failed to clear terminal")?;
-
-    let (tx, rx) = mpsc::channel();
-
-    let app = Arc::new(Mutex::new(App::new(log_data.clone(), top_n)));
-    let app_clone = Arc::clone(&app);
-
-    let handle = tokio::spawn(async move {
-        let progress_callback = {
-            let app = Arc::clone(&app_clone);
-            move |progress| {
-                let mut app = app.lock().unwrap();
-                app.set_progress(progress)
-            }
-        };
-
-        let mut last_processed_line: Option<usize> = None;
-        loop {
-            if rx.try_recv().is_ok() {
-                break;
-            }
-            match tail_file(&file_path, 0, &regex_pattern, &date_format, &log_data_clone, no_clear, last_processed_line.clone(), progress_callback.clone()).await {
-                Ok(last_line) => {
-                    last_processed_line = last_line;
+                if cli_args.show_urls {
+                    println!(
+                        "\nTop {} URLs (total unique: {}):",
+                        cli_args.top, unique_urls
+                    );
+                    println!("{:<50} | {:<10} | {:<10}", "URL", "Requests", "Type");
+                    println!("{:-<50}-+-{:-<10}-+-{:-<10}", "", "", "");
+                    for (url, entry) in top_urls {
+                        println!(
+                            "{:<50} | {:<10} | {:<10}",
+                            url, entry.count, entry.request_type
+                        );
+                    }
                 }
-                Err(e) => {
-                    error!("Error reading file: {:?}", e);
+
+                if cli_args.show_ips {
+                    println!("\nTop {} IPs (total unique: {}):", cli_args.top, unique_ips);
+                    println!("{:<15} | {:<10} | {:<10}", "IP", "Requests", "Type");
+                    println!("{:-<15}-+-{:-<10}-+-{:-<10}", "", "", "");
+                    for (ip, entry) in top_ips {
+                        println!(
+                            "{:<15} | {:<10} | {:<10}",
+                            ip, entry.count, entry.request_type
+                        );
+                    }
+                }
+                return Ok(());
+            }
+
+            // Запускаем TUI
+            enable_raw_mode().context("Failed to enable raw mode")?;
+            let mut stdout = std::io::stdout();
+            execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
+            let backend = CrosstermBackend::new(stdout);
+            let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
+
+            terminal.clear().context("Failed to clear terminal")?;
+
+            let (tx, mut rx) = mpsc::channel(1);
+
+            let app = Arc::new(StdMutex::new(App::new(AppConfig {
+                log_data: log_data.clone(),
+                enable_security: cli_args.enable_security,
+                enable_performance: cli_args.enable_performance,
+                enable_errors: cli_args.enable_errors,
+                enable_bots: cli_args.enable_bots,
+                enable_sparkline: cli_args.enable_sparkline,
+                enable_heatmap: cli_args.enable_heatmap,
+            })));
+            let app_clone = Arc::clone(&app);
+            let count_clone = count;
+            let regex_pattern_clone = regex_pattern.clone();
+            let date_format_clone = date_format.clone();
+            let cli_args_clone = cli_args.clone();
+
+            let handle = tokio::spawn(async move {
+                let progress_callback = {
+                    let app = Arc::clone(&app_clone);
+                    move |progress| {
+                        let mut app = app
+                            .lock()
+                            .expect("Failed to acquire app lock for progress update");
+                        app.set_progress(progress);
+                        // Прогресс теперь отображается только в TUI интерфейсе
+                    }
+                };
+
+                let mut last_processed_line: Option<usize> = None;
+                loop {
+                    if rx.try_recv().is_ok() {
+                        break;
+                    }
+                    let file_path = cli_args_clone
+                        .file
+                        .as_ref()
+                        .expect("File path should be Some when checking");
+                    match tail_file(
+                        file_path,
+                        count_clone,
+                        &regex_pattern_clone,
+                        &date_format_clone,
+                        &log_data_clone,
+                        last_processed_line,
+                        progress_callback.clone(),
+                    )
+                    .await
+                    {
+                        Ok(last_line) => {
+                            last_processed_line = last_line;
+                        }
+                        Err(e) => {
+                            error!("Error reading file: {:?}", e);
+                        }
+                    }
+                    sleep(Duration::from_secs(1)).await;
+                }
+            });
+
+            loop {
+                terminal
+                    .draw(|f| {
+                        let mut app = app.lock().expect("Failed to acquire app lock for drawing");
+                        app.draw(f)
+                    })
+                    .context("Failed to draw terminal")?;
+
+                if event::poll(Duration::from_millis(100)).context("Failed to poll events")? {
+                    if let Event::Key(key) = event::read().context("Failed to read event")? {
+                        let mut app = app
+                            .lock()
+                            .expect("Failed to acquire app lock for input handling");
+                        app.handle_input(key.code, key.modifiers);
+                    }
+                }
+
+                if app
+                    .lock()
+                    .expect("Failed to acquire app lock for quit check")
+                    .should_quit
+                {
+                    break;
                 }
             }
-            sleep(Duration::from_secs(1)).await;
+
+            disable_raw_mode().context("Failed to disable raw mode")?;
+            execute!(terminal.backend_mut(), LeaveAlternateScreen)
+                .context("Failed to leave alternate screen")?;
+            terminal.show_cursor().context("Failed to show cursor")?;
+
+            tx.send(()).await.expect("Failed to send shutdown signal");
+            handle.await.expect("Failed to wait for background task");
+
+            Ok(())
         }
-    });
-
-    loop {
-        terminal.draw(|f| {
-            let mut app = app.lock().unwrap();
-            app.draw(f)
-        }).context("Failed to draw terminal")?;
-
-        if event::poll(Duration::from_millis(100)).context("Failed to poll events")? {
-            if let Event::Key(key) = event::read().context("Failed to read event")? {
-                let mut app = app.lock().unwrap();
-                app.handle_input(key.code, key.modifiers);
-            }
-        }
-
-        if app.lock().unwrap().should_quit {
-            break;
+        Err(e) => {
+            error!("Error reading file: {}", e);
+            Err(anyhow::anyhow!("Error reading file: {}", e))
         }
     }
-
-    disable_raw_mode().context("Failed to disable raw mode")?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen).context("Failed to leave alternate screen")?;
-    terminal.show_cursor().context("Failed to show cursor")?;
-
-    tx.send(()).unwrap();
-    handle.await.unwrap();
-
-    Ok(())
 }
 
-
+#[derive(Debug)]
+enum InteractiveMode {
+    FileSelector,
+    Settings,
+}

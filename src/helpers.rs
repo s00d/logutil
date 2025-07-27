@@ -1,48 +1,80 @@
+use crate::log_data::{LogData, LogEntryParams};
+use chrono::{DateTime, FixedOffset};
+use log::{error, warn};
+use regex::Regex;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use chrono::{DateTime, FixedOffset, Offset, Utc};
-use log::error;
-use regex::Regex;
-use crate::log_data::LogData;
+use std::sync::{Arc, Mutex as StdMutex};
 
+/// Tails a file and processes new lines
 pub async fn tail_file(
     file_path: &PathBuf,
     count: isize,
     regex_pattern: &str,
     date_format: &str,
-    log_data: &Arc<Mutex<LogData>>,
-    no_clear: bool,
+    log_data: &Arc<StdMutex<LogData>>,
     last_processed_line: Option<usize>,
     progress_callback: impl Fn(f64) + Send,
 ) -> std::io::Result<Option<usize>> {
-    let file = OpenOptions::new()
-        .read(true)
-        .open(file_path)?;
+    let file = OpenOptions::new().read(true).open(file_path)?;
 
     let metadata = file.metadata()?;
     let file_size = metadata.len() as f64;
     let mut reader = BufReader::new(file);
-    let mut last_processed = last_processed_line.clone();
+    let mut last_processed = last_processed_line;
 
     if let Some(ref last_line) = last_processed_line {
-        set_reader_to_last_processed_line(&mut reader, last_line.clone(), &progress_callback, file_size).await?;
+        set_reader_to_last_processed_line(&mut reader, *last_line, &progress_callback, file_size)
+            .await?;
     } else if count > 0 {
-        process_last_n_lines(&mut reader, count, regex_pattern, date_format, log_data, no_clear, &mut last_processed, &progress_callback, file_size).await?;
+        process_last_n_lines(
+            &mut reader,
+            count,
+            regex_pattern,
+            date_format,
+            log_data,
+            &mut last_processed,
+            &progress_callback,
+            file_size,
+        )
+        .await?;
+        // В TUI режиме продолжаем мониторинг даже для count > 0
+        // return Ok(last_processed); // Убираем ранний возврат
     } else if count == -1 {
-        process_all_lines_from_start(&mut reader, regex_pattern, date_format, log_data, no_clear, &mut last_processed, &progress_callback, file_size).await?;
+        process_all_lines_from_start(
+            &mut reader,
+            regex_pattern,
+            date_format,
+            log_data,
+            &mut last_processed,
+            &progress_callback,
+            file_size,
+        )
+        .await?;
     } else {
         set_last_processed_to_last_line(&mut reader, &mut last_processed).await?;
     }
 
-    process_new_lines(&mut reader, regex_pattern, date_format, log_data, no_clear, &mut last_processed, &progress_callback, file_size).await?;
-
+    // Продолжаем мониторинг для всех режимов в TUI
+    process_new_lines(
+        &mut reader,
+        regex_pattern,
+        date_format,
+        log_data,
+        &mut last_processed,
+        &progress_callback,
+        file_size,
+    )
+    .await?;
 
     Ok(last_processed)
 }
 
-async fn set_last_processed_to_last_line(reader: &mut BufReader<File>, last_processed: &mut Option<usize>) -> std::io::Result<()> {
+async fn set_last_processed_to_last_line(
+    reader: &mut BufReader<File>,
+    last_processed: &mut Option<usize>,
+) -> std::io::Result<()> {
     let mut buffer = String::new();
     reader.seek(SeekFrom::Start(0))?;
     reader.read_to_string(&mut buffer)?;
@@ -53,7 +85,12 @@ async fn set_last_processed_to_last_line(reader: &mut BufReader<File>, last_proc
     Ok(())
 }
 
-async fn set_reader_to_last_processed_line(reader: &mut BufReader<File>, last_line_number: usize, progress_callback: &impl Fn(f64), file_size: f64) -> std::io::Result<()> {
+async fn set_reader_to_last_processed_line(
+    reader: &mut BufReader<File>,
+    last_line_number: usize,
+    progress_callback: &impl Fn(f64),
+    file_size: f64,
+) -> std::io::Result<()> {
     let mut current_line = 0;
     let mut buffer = String::new();
     let mut processed_bytes = 0;
@@ -77,8 +114,7 @@ async fn process_last_n_lines(
     count: isize,
     regex_pattern: &str,
     date_format: &str,
-    log_data: &Arc<Mutex<LogData>>,
-    no_clear: bool,
+    log_data: &Arc<StdMutex<LogData>>,
     last_processed: &mut Option<usize>,
     progress_callback: &impl Fn(f64),
     _file_size: f64,
@@ -90,12 +126,16 @@ async fn process_last_n_lines(
         line.clear();
     }
 
-    let start = if lines.len() > count as usize { lines.len() - count as usize } else { 0 };
+    let start = if lines.len() > count as usize {
+        lines.len() - count as usize
+    } else {
+        0
+    };
     let total_lines = lines.len();
     let mut processed_lines = 0;
 
     for (index, line) in lines[start..].iter().enumerate() {
-        process_line(line, regex_pattern, date_format, log_data, no_clear).await?;
+        process_line(line, regex_pattern, date_format, log_data).await?;
         processed_lines += 1;
         progress_callback((processed_lines as f64 / total_lines as f64).min(1.0));
         *last_processed = Some(start + index + 1);
@@ -114,8 +154,7 @@ async fn process_all_lines_from_start(
     reader: &mut BufReader<File>,
     regex_pattern: &str,
     date_format: &str,
-    log_data: &Arc<Mutex<LogData>>,
-    no_clear: bool,
+    log_data: &Arc<StdMutex<LogData>>,
     last_processed: &mut Option<usize>,
     progress_callback: &impl Fn(f64),
     file_size: f64,
@@ -126,7 +165,7 @@ async fn process_all_lines_from_start(
 
     let mut line = String::new();
     while reader.read_line(&mut line)? > 0 {
-        process_line(&line, regex_pattern, date_format, log_data, no_clear).await?;
+        process_line(&line, regex_pattern, date_format, log_data).await?;
         processed_bytes += line.len();
         line.clear();
         progress_callback((processed_bytes as f64 / file_size).min(1.0));
@@ -141,8 +180,7 @@ async fn process_new_lines(
     reader: &mut BufReader<File>,
     regex_pattern: &str,
     date_format: &str,
-    log_data: &Arc<Mutex<LogData>>,
-    no_clear: bool,
+    log_data: &Arc<StdMutex<LogData>>,
     last_processed: &mut Option<usize>,
     progress_callback: &impl Fn(f64),
     file_size: f64,
@@ -152,7 +190,7 @@ async fn process_new_lines(
     let mut line_number = last_processed.unwrap_or(0);
 
     while reader.read_line(&mut line)? > 0 {
-        process_line(&line, regex_pattern, date_format, log_data, no_clear).await?;
+        process_line(&line, regex_pattern, date_format, log_data).await?;
         processed_bytes += line.len();
         line.clear();
         progress_callback((processed_bytes as f64 / file_size).min(1.0));
@@ -167,39 +205,184 @@ pub async fn process_line(
     line: &str,
     regex_pattern: &str,
     date_format: &str,
-    log_data: &Arc<Mutex<LogData>>,
-    no_clear: bool,
+    log_data: &Arc<StdMutex<LogData>>,
 ) -> std::io::Result<()> {
-    let re = Regex::new(regex_pattern).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
-    if let Some(caps) = re.captures(line) {
-        let (ip, datetime_str, request_domain, request_type, url) = extract_captures(&caps);
+    // Шаг 1: Компиляция регулярного выражения
+    let re = match Regex::new(regex_pattern) {
+        Ok(re) => re,
+        Err(e) => {
+            error!("Failed to compile regex pattern '{}': {}", regex_pattern, e);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid regex pattern: {}", e),
+            ));
+        }
+    };
 
-        let datetime = parse_datetime(&datetime_str, date_format);
+    // Шаг 2: Поиск совпадений в строке
+    let caps = match re.captures(line) {
+        Some(caps) => caps,
+        None => {
+            error!(
+                "Line does not match regex pattern '{}': {}",
+                regex_pattern,
+                line.trim()
+            );
+            return Ok(()); // Не критическая ошибка, продолжаем обработку
+        }
+    };
 
-        let mut log_data = log_data.lock().unwrap();
-        log_data.add_entry(ip, url, line.to_string(), datetime.timestamp(), request_type, request_domain, no_clear);
-    } else {
-        error!("No match for line: {}", line);
+    // Шаг 3: Извлечение данных из совпадений
+    let (ip, datetime_str, request_domain, request_type, url) = match extract_captures_safe(&caps) {
+        Ok(data) => data,
+        Err(e) => {
+            error!(
+                "Failed to extract captures from line: {} (Error: {})",
+                line.trim(),
+                e
+            );
+            return Ok(()); // Не критическая ошибка, продолжаем обработку
+        }
+    };
+
+    // Проверяем, что IP не пустой
+    if ip.is_empty() {
+        error!("Empty IP address in line: {}", line.trim());
+        return Ok(());
     }
+
+    // Шаг 4: Парсинг даты
+    let datetime = match parse_datetime_safe(&datetime_str, date_format) {
+        Ok(dt) => dt,
+        Err(e) => {
+            error!(
+                "Failed to parse datetime '{}' with format '{}': {}",
+                datetime_str, date_format, e
+            );
+            return Ok(()); // Не критическая ошибка, продолжаем обработку
+        }
+    };
+
+    // Шаг 5: Извлечение дополнительных данных
+    let (status_code, response_size, response_time, user_agent) =
+        extract_additional_data_safe(line);
+
+    // Шаг 6: Добавление записи в LogData
+    let mut log_data = log_data
+        .lock()
+        .expect("Failed to acquire log data lock for entry addition");
+
+    let params = LogEntryParams {
+        ip,
+        url,
+        log_line: line.to_string(),
+        timestamp: datetime.timestamp(),
+        request_type,
+        request_domain,
+        status_code,
+        response_size,
+        response_time,
+        user_agent,
+    };
+
+    log_data.add_entry(params);
 
     Ok(())
 }
 
-fn extract_captures(caps: &regex::Captures) -> (String, String, String, String, String) {
-    (
-        caps.get(1).map_or("", |m| m.as_str()).to_string(),
-        caps.get(2).map_or("", |m| m.as_str()).to_string(),
-        caps.get(3).map_or("", |m| m.as_str()).to_string(),
-        caps.get(4).map_or("", |m| m.as_str()).to_string(),
-        caps.get(5).map_or("", |m| m.as_str()).to_string(),
-    )
+fn extract_captures_safe(
+    caps: &regex::Captures,
+) -> Result<(String, String, String, String, String), String> {
+    let ip = caps.get(1).map_or("", |m| m.as_str()).to_string();
+    let datetime_str = caps.get(2).map_or("", |m| m.as_str()).to_string();
+    let request_domain = caps.get(3).map_or("", |m| m.as_str()).to_string();
+    let request_type = caps.get(4).map_or("", |m| m.as_str()).to_string();
+    let url = caps.get(5).map_or("", |m| m.as_str()).to_string();
+
+    // Проверяем, что все обязательные поля не пустые
+    if ip.is_empty() {
+        return Err("IP address is empty".to_string());
+    }
+    if datetime_str.is_empty() {
+        return Err("Datetime is empty".to_string());
+    }
+    if request_type.is_empty() {
+        return Err("Request type is empty".to_string());
+    }
+    if url.is_empty() {
+        return Err("URL is empty".to_string());
+    }
+
+    Ok((ip, datetime_str, request_domain, request_type, url))
 }
 
-fn parse_datetime(datetime_str: &str, date_format: &str) -> DateTime<FixedOffset> {
-    DateTime::parse_from_str(&datetime_str, date_format)
-        .or_else(|_| DateTime::parse_from_str(&datetime_str, "%d/%b/%Y:%H:%M %S")
-            .map(|dt| dt.with_timezone(&Utc.fix()))
-            .map_err(|_: chrono::ParseError| ())
-        )
-        .unwrap_or_else(|_| Utc::now().with_timezone(&Utc.fix()))
+fn parse_datetime_safe(
+    datetime_str: &str,
+    date_format: &str,
+) -> Result<DateTime<FixedOffset>, String> {
+    // Пробуем основной формат
+    match DateTime::parse_from_str(datetime_str, date_format) {
+        Ok(dt) => Ok(dt),
+        Err(e1) => {
+            // Пробуем альтернативный формат
+            match DateTime::parse_from_str(datetime_str, "%d/%b/%Y:%H:%M:%S %z") {
+                Ok(dt) => Ok(dt),
+                Err(e2) => {
+                    // Пробуем еще один альтернативный формат
+                    match DateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S %z") {
+                        Ok(dt) => Ok(dt),
+                        Err(e3) => {
+                            Err(format!("Failed to parse datetime '{}' with formats '{}', '%d/%b/%Y:%H:%M:%S %z', '%Y-%m-%d %H:%M:%S %z'. Errors: {}, {}, {}", 
+                                datetime_str, date_format, e1, e2, e3))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn extract_additional_data_safe(
+    line: &str,
+) -> (Option<u16>, Option<u64>, Option<f64>, Option<String>) {
+    let mut status_code = None;
+    let mut response_size = None;
+    let mut user_agent = None;
+
+    // Извлекаем статус код
+    if let Some(status_match) = line.split('"').nth(2) {
+        if let Some(code_str) = status_match.split_whitespace().next() {
+            match code_str.parse::<u16>() {
+                Ok(code) => status_code = Some(code),
+                Err(e) => {
+                    warn!("Failed to parse status code '{}': {}", code_str, e);
+                }
+            }
+        }
+    }
+
+    // Извлекаем размер ответа
+    if let Some(status_match) = line.split('"').nth(2) {
+        if let Some(size_str) = status_match.split_whitespace().nth(1) {
+            match size_str.parse::<u64>() {
+                Ok(size) => response_size = Some(size),
+                Err(e) => {
+                    warn!("Failed to parse response size '{}': {}", size_str, e);
+                }
+            }
+        }
+    }
+
+    // Извлекаем User-Agent
+    if let Some(ua_match) = line.split('"').last() {
+        let ua_trimmed = ua_match.trim();
+        if !ua_trimmed.is_empty() {
+            user_agent = Some(ua_trimmed.to_string());
+        }
+    }
+
+    // Время ответа - заглушка, так как обычно не логируется в nginx
+    let response_time = Some(0.1);
+
+    (status_code, response_size, response_time, user_agent)
 }
