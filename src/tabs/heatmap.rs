@@ -3,7 +3,7 @@ use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use chrono::{Datelike, TimeZone, Timelike, Utc};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
@@ -24,8 +24,10 @@ impl HeatmapTab {
             active_panel: 0,
         };
 
-        // Инициализируем выделение для первой панели
+        // Инициализируем выделение для всех панелей
         instance.hourly_table_state.select(Some(0));
+        instance.daily_table_state.select(Some(0));
+        instance.weekly_table_state.select(Some(0));
 
         instance
     }
@@ -86,6 +88,31 @@ impl HeatmapTab {
             })
             .collect();
 
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Time").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Bar").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Count").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
+            Style::new()
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
+                .add_modifier(Modifier::BOLD),
+        );
+
         frame.render_stateful_widget(
             Table::new(
                 items,
@@ -95,6 +122,7 @@ impl HeatmapTab {
                     Constraint::Length(10), // Count
                 ],
             )
+            .header(header)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -147,6 +175,31 @@ impl HeatmapTab {
             })
             .collect();
 
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Date").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Bar").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Count").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
+            Style::new()
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
+                .add_modifier(Modifier::BOLD),
+        );
+
         frame.render_stateful_widget(
             Table::new(
                 items,
@@ -156,6 +209,7 @@ impl HeatmapTab {
                     Constraint::Length(10), // Count
                 ],
             )
+            .header(header)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -208,6 +262,31 @@ impl HeatmapTab {
             })
             .collect();
 
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Week").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Bar").style(
+                Style::new()
+                    .fg(Color::Rgb(0, 255, 255))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from("Count").style(
+                Style::new()
+                    .fg(Color::Rgb(255, 182, 193))
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ])
+        .style(
+            Style::new()
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
+                .add_modifier(Modifier::BOLD),
+        );
+
         frame.render_stateful_widget(
             Table::new(
                 items,
@@ -217,6 +296,7 @@ impl HeatmapTab {
                     Constraint::Length(10), // Count
                 ],
             )
+            .header(header)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -405,12 +485,38 @@ impl super::base::Tab for HeatmapTab {
             crossterm::event::KeyCode::Left => {
                 if self.active_panel > 0 {
                     self.active_panel -= 1;
+                    // Устанавливаем выделение на первую строку для новой активной панели
+                    match self.active_panel {
+                        0 => {
+                            self.hourly_table_state.select(Some(0));
+                        }
+                        1 => {
+                            self.daily_table_state.select(Some(0));
+                        }
+                        2 => {
+                            self.weekly_table_state.select(Some(0));
+                        }
+                        _ => {}
+                    }
                 }
                 true
             }
             crossterm::event::KeyCode::Right => {
                 if self.active_panel < 2 {
                     self.active_panel += 1;
+                    // Устанавливаем выделение на первую строку для новой активной панели
+                    match self.active_panel {
+                        0 => {
+                            self.hourly_table_state.select(Some(0));
+                        }
+                        1 => {
+                            self.daily_table_state.select(Some(0));
+                        }
+                        2 => {
+                            self.weekly_table_state.select(Some(0));
+                        }
+                        _ => {}
+                    }
                 }
                 true
             }
