@@ -83,10 +83,6 @@ impl TuiManager {
             .divider("|")
     }
 
-    pub fn draw_summary<'a>(&self, summary: &'a str) -> Paragraph<'a> {
-        Paragraph::new(summary).block(Block::default().borders(Borders::ALL).title("Summary"))
-    }
-
     /// Renders a modal window with a message
     pub fn draw_modal(&self, frame: &mut Frame, message: &str) {
         let area = frame.area();
