@@ -770,6 +770,16 @@ impl LogData {
         (self.by_ip.len(), self.by_url.len())
     }
 
+    /// Возвращает общее количество запросов
+    pub fn get_total_requests(&self) -> usize {
+        self.total_requests
+    }
+
+    /// Возвращает общее количество обработанных строк
+    pub fn get_total_lines(&self) -> usize {
+        self.by_ip.values().map(|entry| entry.count).sum()
+    }
+
     pub fn get_last_requests(&self, ip: &str) -> Vec<String> {
         self.by_ip
             .get(ip)
