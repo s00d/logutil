@@ -2,7 +2,7 @@ use crate::log_data::LogData;
 use crate::tui_manager::{TuiManager, PANEL_TITLE_STYLE, SELECTED_ITEM_STYLE, TEXT_FG_COLOR};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Tabs},
     Frame,
 };
@@ -87,6 +87,19 @@ impl RequestsTab {
         );
 
         // Request list
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![Cell::from("Request Content").style(
+            Style::new()
+                .fg(Color::Rgb(255, 255, 0))
+                .add_modifier(Modifier::BOLD),
+        )])
+        .style(
+            Style::new()
+                .fg(Color::Rgb(255, 255, 255))
+                .bg(Color::Rgb(80, 80, 80)) // Серый фон для заголовка
+                .add_modifier(Modifier::BOLD),
+        );
+
         params.frame.render_stateful_widget(
             Table::new(
                 params.rows.clone(),
@@ -94,6 +107,7 @@ impl RequestsTab {
                     Constraint::Min(50), // Request content
                 ],
             )
+            .header(header)
             .block(
                 Block::default()
                     .borders(Borders::ALL)
