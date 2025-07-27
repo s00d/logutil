@@ -4,25 +4,30 @@ use chrono::{Datelike, TimeZone, Timelike, Utc};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
 
 pub struct HeatmapTab {
-    hourly_list_state: ListState,
-    daily_list_state: ListState,
-    weekly_list_state: ListState,
+    hourly_table_state: TableState,
+    daily_table_state: TableState,
+    weekly_table_state: TableState,
     active_panel: usize, // 0 = hourly, 1 = daily, 2 = weekly
 }
 
 impl HeatmapTab {
     pub fn new() -> Self {
-        Self {
-            hourly_list_state: ListState::default(),
-            daily_list_state: ListState::default(),
-            weekly_list_state: ListState::default(),
+        let mut instance = Self {
+            hourly_table_state: TableState::default(),
+            daily_table_state: TableState::default(),
+            weekly_table_state: TableState::default(),
             active_panel: 0,
-        }
+        };
+        
+        // Инициализируем выделение для первой панели
+        instance.hourly_table_state.select(Some(0));
+        
+        instance
     }
 
     fn draw_heatmap(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
@@ -68,32 +73,39 @@ impl HeatmapTab {
             return;
         }
 
-        let items: Vec<ListItem> = hourly_data
+        let items: Vec<Row> = hourly_data
             .iter()
             .map(|(hour, count, intensity)| {
                 let bar = self.generate_intensity_bar(*intensity);
                 let time_str = format!("{:02}:00", hour);
-                ListItem::new(format!("{} │ {} │ {}", time_str, bar, count))
-                    .style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                Row::new(vec![
+                    Cell::from(time_str),
+                    Cell::from(bar),
+                    Cell::from(count.to_string()),
+                ])
             })
             .collect();
 
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(if self.active_panel == 0 {
-                            Style::new().fg(Color::Rgb(255, 255, 255))
-                        } else {
-                            Style::new().fg(Color::Rgb(144, 238, 144))
-                        })
-                        .title("🕐 Hourly Request Distribution"),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(items, [
+                Constraint::Length(20),   // Time
+                Constraint::Length(20),  // Bar
+                Constraint::Length(10),  // Count
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(if self.active_panel == 0 {
+                        Style::new().fg(Color::Rgb(255, 255, 255))
+                    } else {
+                        Style::new().fg(Color::Rgb(144, 238, 144))
+                    })
+                    .title("🕐 Hourly Request Distribution"),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.hourly_list_state,
+            &mut self.hourly_table_state,
         );
     }
 
@@ -120,31 +132,38 @@ impl HeatmapTab {
             return;
         }
 
-        let items: Vec<ListItem> = daily_data
+        let items: Vec<Row> = daily_data
             .iter()
             .map(|(day, count, intensity)| {
                 let bar = self.generate_intensity_bar(*intensity);
-                ListItem::new(format!("{} │ {} │ {}", day, bar, count))
-                    .style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                Row::new(vec![
+                    Cell::from(day.to_string()),
+                    Cell::from(bar),
+                    Cell::from(count.to_string()),
+                ])
             })
             .collect();
 
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(if self.active_panel == 1 {
-                            Style::new().fg(Color::Rgb(255, 255, 255))
-                        } else {
-                            Style::new().fg(Color::Rgb(144, 238, 144))
-                        })
-                        .title("📅 Daily Request Distribution"),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(items, [
+                Constraint::Length(20),  // Time - увеличиваем для даты
+                Constraint::Length(20),  // Bar
+                Constraint::Length(10),  // Count
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(if self.active_panel == 1 {
+                        Style::new().fg(Color::Rgb(255, 255, 255))
+                    } else {
+                        Style::new().fg(Color::Rgb(144, 238, 144))
+                    })
+                    .title("📅 Daily Request Distribution"),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.daily_list_state,
+            &mut self.daily_table_state,
         );
     }
 
@@ -171,31 +190,38 @@ impl HeatmapTab {
             return;
         }
 
-        let items: Vec<ListItem> = weekly_data
+        let items: Vec<Row> = weekly_data
             .iter()
             .map(|(week, count, intensity)| {
                 let bar = self.generate_intensity_bar(*intensity);
-                ListItem::new(format!("{} │ {} │ {}", week, bar, count))
-                    .style(Style::new().fg(Color::Rgb(144, 238, 144)))
+                Row::new(vec![
+                    Cell::from(week.to_string()),
+                    Cell::from(bar),
+                    Cell::from(count.to_string()),
+                ])
             })
             .collect();
 
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(if self.active_panel == 2 {
-                            Style::new().fg(Color::Rgb(255, 255, 255))
-                        } else {
-                            Style::new().fg(Color::Rgb(144, 238, 144))
-                        })
-                        .title("📊 Weekly Request Distribution"),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(items, [
+                Constraint::Length(20),  // Time - увеличиваем для недели
+                Constraint::Length(20),  // Bar
+                Constraint::Length(10),  // Count
+            ])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(if self.active_panel == 2 {
+                        Style::new().fg(Color::Rgb(255, 255, 255))
+                    } else {
+                        Style::new().fg(Color::Rgb(144, 238, 144))
+                    })
+                    .title("📊 Weekly Request Distribution"),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.weekly_list_state,
+            &mut self.weekly_table_state,
         );
     }
 
@@ -305,22 +331,64 @@ impl super::base::Tab for HeatmapTab {
         self.draw_heatmap(frame, area, log_data);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, _log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 match self.active_panel {
-                    0 => self.hourly_list_state.select_previous(),
-                    1 => self.daily_list_state.select_previous(),
-                    2 => self.weekly_list_state.select_previous(),
+                    0 => {
+                        if let Some(selected) = self.hourly_table_state.selected() {
+                            if selected > 0 {
+                                self.hourly_table_state.select(Some(selected - 1));
+                            }
+                        }
+                    }
+                    1 => {
+                        if let Some(selected) = self.daily_table_state.selected() {
+                            if selected > 0 {
+                                self.daily_table_state.select(Some(selected - 1));
+                            }
+                        }
+                    }
+                    2 => {
+                        if let Some(selected) = self.weekly_table_state.selected() {
+                            if selected > 0 {
+                                self.weekly_table_state.select(Some(selected - 1));
+                            }
+                        }
+                    }
                     _ => {}
                 }
                 true
             }
             crossterm::event::KeyCode::Down => {
                 match self.active_panel {
-                    0 => self.hourly_list_state.select_next(),
-                    1 => self.daily_list_state.select_next(),
-                    2 => self.weekly_list_state.select_next(),
+                    0 => {
+                        if let Some(selected) = self.hourly_table_state.selected() {
+                            // Получаем количество часов для определения максимального индекса
+                            let hourly_data = self.generate_hourly_data(log_data);
+                            if selected < hourly_data.len().saturating_sub(1) {
+                                self.hourly_table_state.select(Some(selected + 1));
+                            }
+                        }
+                    }
+                    1 => {
+                        if let Some(selected) = self.daily_table_state.selected() {
+                            // Получаем количество дней для определения максимального индекса
+                            let daily_data = self.generate_daily_data(log_data);
+                            if selected < daily_data.len().saturating_sub(1) {
+                                self.daily_table_state.select(Some(selected + 1));
+                            }
+                        }
+                    }
+                    2 => {
+                        if let Some(selected) = self.weekly_table_state.selected() {
+                            // Получаем количество недель для определения максимального индекса
+                            let weekly_data = self.generate_weekly_data(log_data);
+                            if selected < weekly_data.len().saturating_sub(1) {
+                                self.weekly_table_state.select(Some(selected + 1));
+                            }
+                        }
+                    }
                     _ => {}
                 }
                 true
@@ -328,16 +396,12 @@ impl super::base::Tab for HeatmapTab {
             crossterm::event::KeyCode::Left => {
                 if self.active_panel > 0 {
                     self.active_panel -= 1;
-                } else {
-                    self.active_panel = 2; // Переходим к последней панели
                 }
                 true
             }
             crossterm::event::KeyCode::Right => {
                 if self.active_panel < 2 {
                     self.active_panel += 1;
-                } else {
-                    self.active_panel = 0; // Переходим к первой панели
                 }
                 true
             }
