@@ -21,7 +21,7 @@
 
 **LogUtil** is a powerful, real-time log analysis tool written in Rust that provides an interactive terminal interface for monitoring and analyzing Nginx access logs. It offers comprehensive log parsing, real-time monitoring, and detailed analytics with a beautiful TUI (Terminal User Interface).
 
-![LogUtil in action](https://github.com/s00d/logutil/blob/main/assets/logo.png?raw=true)
+![LogUtil in action](https://github.com/s00d/logutil/blob/main/assets/img.gif?raw=true)
 
 ## Key Features
 
