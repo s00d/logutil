@@ -2,23 +2,28 @@ use crate::log_data::LogData;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
 
 pub struct BotsTab {
-    list_state: ListState,
+    table_state: TableState,
 }
 
 impl BotsTab {
     pub fn new() -> Self {
-        Self {
-            list_state: ListState::default(),
-        }
+        let mut instance = Self {
+            table_state: TableState::default(),
+        };
+        
+        // Инициализируем выделение
+        instance.table_state.select(Some(0));
+        
+        instance
     }
 
-    fn draw_bots_tab(&self, frame: &mut Frame, area: Rect, log_data: &LogData) {
+    fn draw_bots_tab(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
         let (bot_ips_count, bot_types_count, bot_urls_count) = log_data.get_bot_summary();
         let top_bot_types = log_data.get_top_bot_types();
 
@@ -45,26 +50,45 @@ impl BotsTab {
         );
 
         // Bot types list
-        let items: Vec<ListItem> = top_bot_types
+        let items: Vec<Row> = top_bot_types
             .iter()
             .map(|(bot_type, count)| {
-                ListItem::new(format!("{:<20} │ {:<10} │ Bot Activity", bot_type, count))
-                    .style(Style::new().fg(Color::Rgb(0, 255, 255)))
+                Row::new(vec![
+                    Cell::from(bot_type.to_string()).style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)), // Type - желтый, жирный
+                    Cell::from(count.to_string()).style(Style::new().fg(Color::Rgb(0, 255, 255))), // Count - голубой
+                    Cell::from("Bot Activity").style(Style::new().fg(Color::Rgb(255, 182, 193))), // Activity - розовый
+                ])
             })
             .collect();
 
+        // Создаем заголовок для таблицы
+        let header = Row::new(vec![
+            Cell::from("Type").style(Style::new().fg(Color::Rgb(255, 255, 0)).add_modifier(Modifier::BOLD)),
+            Cell::from("Count").style(Style::new().fg(Color::Rgb(0, 255, 255)).add_modifier(Modifier::BOLD)),
+            Cell::from("Activity").style(Style::new().fg(Color::Rgb(255, 182, 193)).add_modifier(Modifier::BOLD)),
+        ]).style(
+            Style::new()
+                .fg(Color::Rgb(0, 191, 255))
+                .add_modifier(Modifier::BOLD)
+        );
+
         frame.render_stateful_widget(
-            List::new(items)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(Style::new().fg(Color::Rgb(0, 255, 255)))
-                        .title("Bot Types"),
-                )
-                .highlight_style(SELECTED_ITEM_STYLE),
+            Table::new(items, [
+                Constraint::Length(20), // Type
+                Constraint::Length(10), // Count
+                Constraint::Min(15),    // Activity
+            ])
+            .header(header)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(Style::new().fg(Color::Rgb(0, 255, 255)))
+                    .title("Bot Types"),
+            )
+            .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[1],
-            &mut self.list_state.clone(),
+            &mut self.table_state.clone(),
         );
     }
 }
@@ -80,14 +104,24 @@ impl super::base::Tab for BotsTab {
         self.draw_bots_tab(frame, area, log_data);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, _log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
-                self.list_state.select_previous();
+                if let Some(selected) = self.table_state.selected() {
+                    if selected > 0 {
+                        self.table_state.select(Some(selected - 1));
+                    }
+                }
                 true
             }
             crossterm::event::KeyCode::Down => {
-                self.list_state.select_next();
+                if let Some(selected) = self.table_state.selected() {
+                    // Получаем количество типов ботов для определения максимального индекса
+                    let top_bot_types = log_data.get_top_bot_types();
+                    if selected < top_bot_types.len().saturating_sub(1) {
+                        self.table_state.select(Some(selected + 1));
+                    }
+                }
                 true
             }
             _ => false,
