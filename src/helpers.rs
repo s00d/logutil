@@ -349,35 +349,43 @@ fn extract_additional_data_safe(
     let mut response_size = None;
     let mut user_agent = None;
 
-    // Извлекаем статус код
-    if let Some(status_match) = line.split('"').nth(2) {
-        if let Some(code_str) = status_match.split_whitespace().next() {
-            match code_str.parse::<u16>() {
-                Ok(code) => status_code = Some(code),
-                Err(e) => {
-                    warn!("Failed to parse status code '{}': {}", code_str, e);
-                }
+    // Проверяем, что строка имеет правильный формат nginx лога
+    if !line.contains('"') || !line.contains('[') || !line.contains(']') {
+        return (None, None, Some(0.1), None);
+    }
+
+    // Парсим nginx лог формат: IP - - [DATE] TIME "METHOD" "REQUEST" STATUS SIZE "REFERER" "USER_AGENT"
+    // Ищем статус код и размер ответа после кавычек
+    let quote_positions: Vec<usize> = line.char_indices()
+        .filter(|(_, c)| *c == '"')
+        .map(|(i, _)| i)
+        .collect();
+    
+    if quote_positions.len() >= 4 {
+        // После второй кавычки должен быть статус код и размер
+        let after_second_quote = &line[quote_positions[1] + 1..];
+        let parts: Vec<&str> = after_second_quote.split_whitespace().collect();
+        
+        if parts.len() >= 2 {
+            // Первый элемент после кавычек - статус код
+            if let Ok(code) = parts[0].parse::<u16>() {
+                status_code = Some(code);
+            }
+            
+            // Второй элемент - размер ответа
+            if let Ok(size) = parts[1].parse::<u64>() {
+                response_size = Some(size);
             }
         }
     }
-
-    // Извлекаем размер ответа
-    if let Some(status_match) = line.split('"').nth(2) {
-        if let Some(size_str) = status_match.split_whitespace().nth(1) {
-            match size_str.parse::<u64>() {
-                Ok(size) => response_size = Some(size),
-                Err(e) => {
-                    warn!("Failed to parse response size '{}': {}", size_str, e);
-                }
-            }
-        }
-    }
-
-    // Извлекаем User-Agent
-    if let Some(ua_match) = line.split('"').last() {
-        let ua_trimmed = ua_match.trim();
-        if !ua_trimmed.is_empty() {
-            user_agent = Some(ua_trimmed.to_string());
+    
+    // User-Agent обычно находится в последних кавычках
+    if quote_positions.len() >= 6 {
+        let ua_start = quote_positions[quote_positions.len() - 2] + 1;
+        let ua_end = quote_positions[quote_positions.len() - 1];
+        let ua = &line[ua_start..ua_end];
+        if !ua.trim().is_empty() && ua != "-" {
+            user_agent = Some(ua.trim().to_string());
         }
     }
 
