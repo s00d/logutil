@@ -1,4 +1,4 @@
-use crate::log_data::LogData;
+use crate::memory_db::GLOBAL_DB;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -23,9 +23,10 @@ impl BotsTab {
         instance
     }
 
-    fn draw_bots_tab(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let (bot_ips_count, bot_types_count, bot_urls_count) = log_data.get_bot_summary();
-        let top_bot_types = log_data.get_top_bot_types();
+    fn draw_bots_tab(&mut self, frame: &mut Frame, area: Rect) {
+        let db = GLOBAL_DB.read().unwrap();
+        let (bot_ips_count, bot_types_count, bot_urls_count) = db.get_bot_stats();
+        let top_user_agents = db.get_top_user_agents(10);
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -50,9 +51,19 @@ impl BotsTab {
         );
 
         // Bot types list
-        let items: Vec<Row> = top_bot_types
+        let items: Vec<Row> = top_user_agents
             .iter()
-            .map(|(bot_type, count)| {
+            .map(|(user_agent, count)| {
+                let bot_type = if user_agent.contains("bot") || user_agent.contains("crawler") {
+                    "Bot/Crawler"
+                } else if user_agent.contains("spider") {
+                    "Spider"
+                } else if user_agent.contains("scraper") {
+                    "Scraper"
+                } else {
+                    "Other"
+                };
+                
                 Row::new(vec![
                     Cell::from(bot_type.to_string()).style(
                         Style::new()
@@ -105,11 +116,11 @@ impl BotsTab {
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::new().fg(Color::Rgb(0, 255, 255)))
-                    .title("Bot Types"),
+                    .title("Top Bot Types"),
             )
             .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[1],
-            &mut self.table_state.clone(),
+            &mut self.table_state,
         );
     }
 }
@@ -121,11 +132,11 @@ impl Default for BotsTab {
 }
 
 impl super::base::Tab for BotsTab {
-    fn draw(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        self.draw_bots_tab(frame, area, log_data);
+    fn draw(&mut self, frame: &mut Frame, area: Rect) {
+        self.draw_bots_tab(frame, area);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 if let Some(selected) = self.table_state.selected() {
@@ -136,10 +147,10 @@ impl super::base::Tab for BotsTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
+                let db = GLOBAL_DB.read().unwrap();
+                let top_user_agents = db.get_top_user_agents(10);
                 if let Some(selected) = self.table_state.selected() {
-                    // Получаем количество типов ботов для определения максимального индекса
-                    let top_bot_types = log_data.get_top_bot_types();
-                    if selected < top_bot_types.len().saturating_sub(1) {
+                    if selected < top_user_agents.len().saturating_sub(1) {
                         self.table_state.select(Some(selected + 1));
                     }
                 }
