@@ -1,4 +1,4 @@
-use crate::log_data::LogData;
+use crate::memory_db::GLOBAL_DB;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use chrono::{Datelike, TimeZone, Timelike, Utc};
 use ratatui::{
@@ -32,7 +32,7 @@ impl HeatmapTab {
         instance
     }
 
-    fn draw_heatmap(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
+    fn draw_heatmap(&mut self, frame: &mut Frame, area: Rect) {
         // Разделяем область на три равные панели
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -47,13 +47,14 @@ impl HeatmapTab {
             .split(area);
 
         // Рисуем все три панели одновременно
-        self.draw_hourly_view(frame, chunks[0], log_data);
-        self.draw_daily_view(frame, chunks[1], log_data);
-        self.draw_weekly_view(frame, chunks[2], log_data);
+        self.draw_hourly_view(frame, chunks[0]);
+        self.draw_daily_view(frame, chunks[1]);
+        self.draw_weekly_view(frame, chunks[2]);
     }
 
-    fn draw_hourly_view(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let hourly_data = self.generate_hourly_data(log_data);
+    fn draw_hourly_view(&mut self, frame: &mut Frame, area: Rect) {
+        let db = GLOBAL_DB.read().unwrap();
+        let hourly_data = self.generate_hourly_data(&db);
 
         if hourly_data.is_empty() {
             frame.render_widget(
@@ -113,12 +114,13 @@ impl HeatmapTab {
                 .add_modifier(Modifier::BOLD),
         );
 
+        let mut table_state = self.hourly_table_state.clone();
         frame.render_stateful_widget(
             Table::new(
                 items,
                 [
                     Constraint::Length(20), // Time
-                    Constraint::Length(20), // Bar
+                    Constraint::Length(25), // Bar
                     Constraint::Length(10), // Count
                 ],
             )
@@ -136,12 +138,14 @@ impl HeatmapTab {
             )
             .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.hourly_table_state,
+            &mut table_state,
         );
+        self.hourly_table_state = table_state;
     }
 
-    fn draw_daily_view(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let daily_data = self.generate_daily_data(log_data);
+    fn draw_daily_view(&mut self, frame: &mut Frame, area: Rect) {
+        let db = GLOBAL_DB.read().unwrap();
+        let daily_data = self.generate_daily_data(&db);
 
         if daily_data.is_empty() {
             frame.render_widget(
@@ -200,12 +204,13 @@ impl HeatmapTab {
                 .add_modifier(Modifier::BOLD),
         );
 
+        let mut table_state = self.daily_table_state.clone();
         frame.render_stateful_widget(
             Table::new(
                 items,
                 [
-                    Constraint::Length(20), // Time - увеличиваем для даты
-                    Constraint::Length(20), // Bar
+                    Constraint::Length(20), // Date
+                    Constraint::Length(25), // Bar
                     Constraint::Length(10), // Count
                 ],
             )
@@ -223,12 +228,14 @@ impl HeatmapTab {
             )
             .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.daily_table_state,
+            &mut table_state,
         );
+        self.daily_table_state = table_state;
     }
 
-    fn draw_weekly_view(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let weekly_data = self.generate_weekly_data(log_data);
+    fn draw_weekly_view(&mut self, frame: &mut Frame, area: Rect) {
+        let db = GLOBAL_DB.read().unwrap();
+        let weekly_data = self.generate_weekly_data(&db);
 
         if weekly_data.is_empty() {
             frame.render_widget(
@@ -287,12 +294,13 @@ impl HeatmapTab {
                 .add_modifier(Modifier::BOLD),
         );
 
+        let mut table_state = self.weekly_table_state.clone();
         frame.render_stateful_widget(
             Table::new(
                 items,
                 [
-                    Constraint::Length(20), // Time - увеличиваем для недели
-                    Constraint::Length(20), // Bar
+                    Constraint::Length(20), // Week
+                    Constraint::Length(25), // Bar
                     Constraint::Length(10), // Count
                 ],
             )
@@ -310,18 +318,20 @@ impl HeatmapTab {
             )
             .row_highlight_style(SELECTED_ITEM_STYLE),
             area,
-            &mut self.weekly_table_state,
+            &mut table_state,
         );
+        self.weekly_table_state = table_state;
     }
 
-    fn generate_hourly_data(&self, log_data: &LogData) -> Vec<(u32, u64, f64)> {
+    fn generate_hourly_data(&self, db: &crate::memory_db::MemoryDB) -> Vec<(u32, u64, f64)> {
         let mut hourly_counts: std::collections::HashMap<u32, u64> =
             std::collections::HashMap::new();
 
-        for (&timestamp, &count) in &log_data.requests_per_interval {
-            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
+        let records = db.get_all_records();
+        for record in records {
+            let datetime = Utc.timestamp_opt(record.timestamp, 0).unwrap();
             let hour = datetime.hour();
-            *hourly_counts.entry(hour).or_insert(0) += count as u64;
+            *hourly_counts.entry(hour).or_insert(0) += 1;
         }
 
         let max_count = *hourly_counts.values().max().unwrap_or(&1);
@@ -338,14 +348,15 @@ impl HeatmapTab {
         result
     }
 
-    fn generate_daily_data(&self, log_data: &LogData) -> Vec<(String, u64, f64)> {
+    fn generate_daily_data(&self, db: &crate::memory_db::MemoryDB) -> Vec<(String, u64, f64)> {
         let mut daily_counts: std::collections::HashMap<String, u64> =
             std::collections::HashMap::new();
 
-        for (&timestamp, &count) in &log_data.requests_per_interval {
-            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
+        let records = db.get_all_records();
+        for record in records {
+            let datetime = Utc.timestamp_opt(record.timestamp, 0).unwrap();
             let date_str = datetime.format("%Y-%m-%d").to_string();
-            *daily_counts.entry(date_str).or_insert(0) += count as u64;
+            *daily_counts.entry(date_str).or_insert(0) += 1;
         }
 
         let max_count = *daily_counts.values().max().unwrap_or(&1);
@@ -362,14 +373,15 @@ impl HeatmapTab {
         result
     }
 
-    fn generate_weekly_data(&self, log_data: &LogData) -> Vec<(String, u64, f64)> {
+    fn generate_weekly_data(&self, db: &crate::memory_db::MemoryDB) -> Vec<(String, u64, f64)> {
         let mut weekly_counts: std::collections::HashMap<String, u64> =
             std::collections::HashMap::new();
 
-        for (&timestamp, &count) in &log_data.requests_per_interval {
-            let datetime = Utc.timestamp_opt(timestamp, 0).unwrap();
+        let records = db.get_all_records();
+        for record in records {
+            let datetime = Utc.timestamp_opt(record.timestamp, 0).unwrap();
             let week_str = format!("Week {} of {}", datetime.iso_week().week(), datetime.year());
-            *weekly_counts.entry(week_str).or_insert(0) += count as u64;
+            *weekly_counts.entry(week_str).or_insert(0) += 1;
         }
 
         let max_count = *weekly_counts.values().max().unwrap_or(&1);
@@ -416,11 +428,11 @@ impl Default for HeatmapTab {
 }
 
 impl super::base::Tab for HeatmapTab {
-    fn draw(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        self.draw_heatmap(frame, area, log_data);
+    fn draw(&mut self, frame: &mut Frame, area: Rect) {
+        self.draw_heatmap(frame, area);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 match self.active_panel {
@@ -454,7 +466,8 @@ impl super::base::Tab for HeatmapTab {
                     0 => {
                         if let Some(selected) = self.hourly_table_state.selected() {
                             // Получаем количество часов для определения максимального индекса
-                            let hourly_data = self.generate_hourly_data(log_data);
+                            let db = GLOBAL_DB.read().unwrap();
+                            let hourly_data = self.generate_hourly_data(&db);
                             if selected < hourly_data.len().saturating_sub(1) {
                                 self.hourly_table_state.select(Some(selected + 1));
                             }
@@ -463,7 +476,8 @@ impl super::base::Tab for HeatmapTab {
                     1 => {
                         if let Some(selected) = self.daily_table_state.selected() {
                             // Получаем количество дней для определения максимального индекса
-                            let daily_data = self.generate_daily_data(log_data);
+                            let db = GLOBAL_DB.read().unwrap();
+                            let daily_data = self.generate_daily_data(&db);
                             if selected < daily_data.len().saturating_sub(1) {
                                 self.daily_table_state.select(Some(selected + 1));
                             }
@@ -472,7 +486,8 @@ impl super::base::Tab for HeatmapTab {
                     2 => {
                         if let Some(selected) = self.weekly_table_state.selected() {
                             // Получаем количество недель для определения максимального индекса
-                            let weekly_data = self.generate_weekly_data(log_data);
+                            let db = GLOBAL_DB.read().unwrap();
+                            let weekly_data = self.generate_weekly_data(&db);
                             if selected < weekly_data.len().saturating_sub(1) {
                                 self.weekly_table_state.select(Some(selected + 1));
                             }
