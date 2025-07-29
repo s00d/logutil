@@ -1,6 +1,6 @@
 use crate::log_data::{LogData, LogEntryParams};
 use chrono::{DateTime, FixedOffset};
-use log::{error, warn};
+use log::{error};
 use regex::Regex;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
