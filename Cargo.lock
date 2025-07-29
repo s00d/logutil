@@ -771,7 +771,7 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "logutil"
-version = "0.13.1"
+version = "0.13.2"
 dependencies = [
  "anyhow",
  "arboard",
@@ -779,7 +779,6 @@ dependencies = [
  "crossterm 0.29.0",
  "env_logger",
  "log",
- "once_cell",
  "ratatui",
  "regex-lite",
  "structopt",
