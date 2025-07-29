@@ -9,9 +9,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 
 // Кэш для скомпилированных регулярных выражений
-lazy_static::lazy_static! {
-    static ref REGEX_CACHE: Arc<StdMutex<HashMap<String, Regex>>> = Arc::new(StdMutex::new(HashMap::new()));
-}
+static REGEX_CACHE: once_cell::sync::Lazy<Arc<StdMutex<HashMap<String, Regex>>>> =
+    once_cell::sync::Lazy::new(|| Arc::new(StdMutex::new(HashMap::new())));
 
 /// Получает или компилирует регулярное выражение с кэшированием
 fn get_or_compile_regex(pattern: &str) -> Result<Regex, String> {
