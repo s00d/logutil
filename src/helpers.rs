@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, LazyLock};
 
 // Кэш для скомпилированных регулярных выражений
-static REGEX_CACHE: once_cell::sync::Lazy<Arc<StdMutex<HashMap<String, Regex>>>> =
-    once_cell::sync::Lazy::new(|| Arc::new(StdMutex::new(HashMap::new())));
+static REGEX_CACHE: LazyLock<Arc<StdMutex<HashMap<String, Regex>>>> = 
+    LazyLock::new(|| Arc::new(StdMutex::new(HashMap::new())));
 
 /// Получает или компилирует регулярное выражение с кэшированием
 fn get_or_compile_regex(pattern: &str) -> Result<Regex, String> {
