@@ -1,4 +1,4 @@
-use crate::log_data::LogData;
+use crate::memory_db::GLOBAL_DB;
 use crate::tui_manager::HEADER_STYLE;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -23,10 +23,11 @@ impl PerformanceTab {
         instance
     }
 
-    fn draw_performance_tab(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let (avg_time, max_time, min_time, total_size) = log_data.get_performance_summary();
-        let slow_requests = log_data.get_slow_requests(); // Requests slower than 1 second
-        let requests_per_second = log_data.get_requests_per_second();
+    fn draw_performance_tab(&mut self, frame: &mut Frame, area: Rect) {
+        let db = GLOBAL_DB.read().unwrap();
+        let (avg_time, max_time, min_time) = db.get_response_time_stats();
+        let slow_requests = db.get_slow_requests_with_limit(1.0, 10);
+        let requests_per_second = db.get_requests_per_second();
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -35,8 +36,8 @@ impl PerformanceTab {
 
         // Performance summary with RPS
         let summary_text = format!(
-            "Avg Response: {:.2}s | Max: {:.2}s | Min: {:.2}s | Total Size: {} bytes | RPS: {:.1}",
-            avg_time, max_time, min_time, total_size, requests_per_second
+            "Avg Response: {:.2}s | Max: {:.2}s | Min: {:.2}s | RPS: {:.1}",
+            avg_time, max_time, min_time, requests_per_second
         );
 
         frame.render_widget(
@@ -53,7 +54,6 @@ impl PerformanceTab {
         // Slow requests list with detailed tracking
         let items: Vec<Row> = slow_requests
             .iter()
-            .take(10)
             .map(|(ip, time)| {
                 Row::new(vec![
                     Cell::from(ip.to_string()).style(
@@ -100,10 +100,15 @@ impl PerformanceTab {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
-                    .border_style(Style::new().fg(Color::Rgb(255, 165, 0)))
-                    .title("Slow Requests (Top 10)"),
+                    .border_style(Style::new().fg(Color::Rgb(0, 255, 0)))
+                    .title("Slow Requests (>1s)"),
             )
-            .row_highlight_style(Style::new().fg(Color::Rgb(255, 165, 0))),
+            .row_highlight_style(
+                Style::new()
+                    .fg(Color::Rgb(255, 255, 255))
+                    .bg(Color::Rgb(0, 255, 0))
+                    .add_modifier(Modifier::BOLD),
+            ),
             chunks[1],
             &mut self.table_state,
         );
@@ -117,11 +122,11 @@ impl Default for PerformanceTab {
 }
 
 impl super::base::Tab for PerformanceTab {
-    fn draw(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        self.draw_performance_tab(frame, area, log_data);
+    fn draw(&mut self, frame: &mut Frame, area: Rect) {
+        self.draw_performance_tab(frame, area);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 if let Some(selected) = self.table_state.selected() {
@@ -132,11 +137,10 @@ impl super::base::Tab for PerformanceTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
+                let db = GLOBAL_DB.read().unwrap();
+                let slow_requests = db.get_slow_requests_with_limit(1.0, 10);
                 if let Some(selected) = self.table_state.selected() {
-                    // Получаем количество медленных запросов для определения максимального индекса
-                    let slow_requests = log_data.get_slow_requests();
-                    let max_items = slow_requests.len().min(10);
-                    if selected < max_items.saturating_sub(1) {
+                    if selected < slow_requests.len().saturating_sub(1) {
                         self.table_state.select(Some(selected + 1));
                     }
                 }
