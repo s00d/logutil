@@ -1,11 +1,10 @@
 mod app;
-mod file_selector;
 mod helpers;
 mod log_data;
-mod settings;
 mod tab_manager;
 mod tabs;
 mod tui_manager;
+mod file_settings;
 
 use crate::app::App;
 use app::AppConfig;
@@ -13,14 +12,13 @@ use app::AppConfig;
 use crossterm::{
     event::{self, Event},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, Clear, ClearType},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, Terminal};
 
-use crate::file_selector::{FileSelector, FileSelectorAction};
 use crate::helpers::tail_file;
 use crate::log_data::LogData;
-use crate::settings::{CliArgs, Settings, SettingsAction};
+use crate::file_settings::{FileSettings, FileSettingsAction, CliArgs};
 use crate::tui_manager::{draw_simple_progress_bar_with_text, hide_progress_bar};
 use anyhow::{Context, Result};
 use env_logger::Builder;
@@ -184,9 +182,10 @@ async fn run_interactive_mode(args: Cli) -> Result<()> {
         enable_heatmap: args.enable_heatmap,
     };
 
-    let mut current_mode = InteractiveMode::FileSelector;
-    let mut file_selector = FileSelector::new();
-    let mut settings: Option<Settings> = None;
+    let mut file_settings = FileSettings::new_with_args(&initial_cli_args);
+    
+    // Включаем поддержку мыши
+    file_settings.enable_mouse().context("Failed to enable mouse")?;
 
     enable_raw_mode().context("Failed to enable raw mode")?;
     let mut stdout = std::io::stdout();
@@ -198,40 +197,24 @@ async fn run_interactive_mode(args: Cli) -> Result<()> {
 
     loop {
         terminal
-            .draw(|f| match current_mode {
-                InteractiveMode::FileSelector => {
-                    file_selector.draw(f, f.area());
-                }
-                InteractiveMode::Settings => {
-                    if let Some(ref mut settings_ref) = settings {
-                        settings_ref.draw(f, f.area());
-                    }
-                }
+            .draw(|f| {
+                file_settings.draw(f, f.area());
             })
             .context("Failed to draw terminal")?;
 
         if event::poll(Duration::from_millis(100)).context("Failed to poll events")? {
-            if let Event::Key(key) = event::read().context("Failed to read event")? {
-                match current_mode {
-                    InteractiveMode::FileSelector => {
-                        match file_selector.handle_input(key) {
-                            FileSelectorAction::Continue => {}
-                            FileSelectorAction::FileSelected(file_path) => {
-                                // Создаем Settings с текущими CLI аргументами
-                                let current_cli_args = if let Some(ref settings_ref) = settings {
-                                    settings_ref.get_cli_args()
-                                } else {
-                                    initial_cli_args.clone()
-                                };
-                                settings =
-                                    Some(Settings::new_with_args(file_path, &current_cli_args));
-                                current_mode = InteractiveMode::Settings;
+            match event::read().context("Failed to read event")? {
+                Event::Key(key) => {
+                    if let Some(action) = file_settings.handle_input(key) {
+                        match action {
+                            FileSettingsAction::StartAnalysis(cli_args) => {
+                                // Выключаем мышь перед запуском анализа
+                                file_settings.disable_mouse().context("Failed to disable mouse")?;
+                                return run_analysis_with_args(cli_args).await;
                             }
-                            FileSelectorAction::Cancel => {
-                                break;
-                            }
-                            FileSelectorAction::Exit => {
+                            FileSettingsAction::Exit => {
                                 // Восстанавливаем терминал перед выходом
+                                file_settings.disable_mouse().context("Failed to disable mouse")?;
                                 disable_raw_mode().context("Failed to disable raw mode")?;
                                 execute!(terminal.backend_mut(), LeaveAlternateScreen)
                                     .context("Failed to leave alternate screen")?;
@@ -240,43 +223,39 @@ async fn run_interactive_mode(args: Cli) -> Result<()> {
                             }
                         }
                     }
-                    InteractiveMode::Settings => {
-                        let mut back = false;
-                        if let Some(settings_ref) = settings.as_mut() {
-                            match settings_ref.handle_input(key) {
-                                SettingsAction::Continue => {}
-                                SettingsAction::Back => {
-                                    current_mode = InteractiveMode::FileSelector;
-                                    back = true;
-                                }
-                                SettingsAction::StartAnalysis(cli_args) => {
-                                    return run_analysis_with_args(cli_args).await;
-                                }
-                                SettingsAction::Exit => {
-                                    // Восстанавливаем терминал перед выходом
-                                    disable_raw_mode().context("Failed to disable raw mode")?;
-                                    execute!(terminal.backend_mut(), LeaveAlternateScreen)
-                                        .context("Failed to leave alternate screen")?;
-                                    terminal.show_cursor().context("Failed to show cursor")?;
-                                    return Ok(());
-                                }
+                }
+                Event::Mouse(mouse) => {
+                    let size = terminal.size()?;
+                    let total_area = Rect::new(0, 0, size.width, size.height);
+                    
+                    // Вычисляем области панелей так же, как в draw методе
+                    let chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                        .split(total_area);
+                    
+                    let file_selector_area = chunks[0];
+                    let settings_area = chunks[1];
+                    
+                    if let Some(action) = file_settings.handle_mouse(mouse, file_selector_area, settings_area) {
+                        match action {
+                            FileSettingsAction::StartAnalysis(cli_args) => {
+                                // Выключаем мышь перед запуском анализа
+                                file_settings.disable_mouse().context("Failed to disable mouse")?;
+                                disable_raw_mode().context("Failed to disable raw mode")?;
+                                execute!(terminal.backend_mut(), LeaveAlternateScreen, Clear(ClearType::All))
+                                    .context("Failed to leave alternate screen")?;
+                                return run_analysis_with_args(cli_args).await;
                             }
-                        }
-                        if back {
-                            settings = None;
+
+                            _ => {}
                         }
                     }
                 }
+                _ => {}
             }
         }
     }
-
-    disable_raw_mode().context("Failed to disable raw mode")?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)
-        .context("Failed to leave alternate screen")?;
-    terminal.show_cursor().context("Failed to show cursor")?;
-
-    Ok(())
 }
 
 async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
@@ -491,8 +470,4 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
     }
 }
 
-#[derive(Debug)]
-enum InteractiveMode {
-    FileSelector,
-    Settings,
-}
+
