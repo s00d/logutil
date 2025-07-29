@@ -1,7 +1,8 @@
 mod app;
+mod file_reader;
 mod file_settings;
-mod helpers;
-mod log_data;
+mod progress_bar;
+mod memory_db;
 mod tab_manager;
 mod tabs;
 mod tui_manager;
@@ -24,20 +25,21 @@ use ratatui::{
 };
 
 use crate::file_settings::{CliArgs, FileSettings, FileSettingsAction};
-use crate::helpers::tail_file;
-use crate::log_data::LogData;
-use crate::tui_manager::{draw_simple_progress_bar_with_text, hide_progress_bar};
+use crate::file_reader::FileReader;
+use crate::tui_manager::{hide_progress_bar};
 use anyhow::{Context, Result};
 use env_logger::Builder;
 use log::{error, LevelFilter};
 use std::env;
 use std::fs::File;
+
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use structopt::StructOpt;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
+
 
 #[derive(StructOpt)]
 #[structopt(
@@ -56,6 +58,7 @@ struct Cli {
     count: isize,
 
     /// Regular expression to parse the log entries or path to a file containing the regex
+    /// DO NOT CHANGE DEFAULT VALUES - они настроены для совместимости с существующими логами
     #[structopt(
         short,
         long,
@@ -64,6 +67,7 @@ struct Cli {
     regex: String,
 
     /// Date format to parse the log entries
+    /// DO NOT CHANGE DEFAULT VALUES - они настроены для совместимости с существующими логами
     #[structopt(short = "d", long, default_value = "%d/%b/%Y:%H:%M:%S %z")]
     date_format: String,
 
@@ -111,6 +115,14 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Cli::from_args();
+
+    // Простая запись в файл для отладки
+    if args.log_to_file {
+        if let Ok(mut file) = std::fs::File::create("logutil.log") {
+            use std::io::Write;
+            let _ = writeln!(file, "Logutil started at {}", chrono::Local::now());
+        }
+    }
 
     // Если файл не указан или указана пустая строка, запускаем интерактивный режим
     if args.file.is_none()
@@ -299,82 +311,60 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
     let date_format = cli_args.date_format.clone();
     let _top_n = cli_args.top;
 
-    let log_data = Arc::new(StdMutex::new(LogData::with_enabled_tabs(
-        cli_args.enable_security,
-        cli_args.enable_performance,
-        cli_args.enable_errors,
-        cli_args.enable_bots,
-        cli_args.enable_sparkline,
-        cli_args.enable_heatmap,
-    )));
-    let log_data_clone = Arc::clone(&log_data);
-
     // First read the file
-    let progress_callback = |progress: f64| {
-        let log_data = log_data_clone.lock().unwrap();
-        let (unique_ips, unique_urls) = log_data.get_unique_counts();
-        let total_requests = log_data.get_total_requests();
-        let text = format!(
-            "Processed: {} lines | IPs: {} | URLs: {} | Requests: {}",
-            log_data.get_total_lines(),
-            unique_ips,
-            unique_urls,
-            total_requests
-        );
-        drop(log_data); // Освобождаем блокировку
-        draw_simple_progress_bar_with_text(progress, &text);
-    };
-    let last_processed_line: Option<usize> = None;
 
     let file_path = cli_args
         .file
         .as_ref()
         .expect("File path should be Some when checking");
-    match tail_file(
-        file_path,
-        count,
-        &regex_pattern,
-        &date_format,
-        &log_data_clone,
-        last_processed_line,
-        progress_callback,
-    )
-    .await
-    {
-        Ok(_last_line) => {
-            eprintln!(); // Новая строка после прогресса
-            hide_progress_bar(); // Скрываем прогресс-бар
+    
+    // Инициализируем FileReader и обрабатываем файл
+    let mut file_reader = FileReader::new(
+        file_path.clone(),
+        regex_pattern.clone(),
+        date_format.clone(),
+    );
+    
+    if let Err(e) = file_reader.initialize(count) {
+        error!("Error initializing file reader: {:?}", e);
+        return Err(anyhow::anyhow!("Error initializing file reader: {}", e));
+    }
+    
+    // Получаем позицию после инициализации
+    let last_processed_line = file_reader.count_lines().unwrap_or(0);
+    
+    eprintln!(); // Новая строка после прогресса
+    hide_progress_bar(); // Скрываем прогресс-бар
                                  // Output statistics to console if requested
             if cli_args.show_urls || cli_args.show_ips {
-                let log_data = log_data
-                    .lock()
-                    .expect("Failed to acquire log data lock for statistics");
-                let (top_ips, top_urls) = log_data.get_top_n(cli_args.top);
-                let (unique_ips, unique_urls) = log_data.get_unique_counts();
+                let db = crate::memory_db::GLOBAL_DB.read().unwrap();
+                let top_ips = db.get_top_ips(cli_args.top);
+                let top_urls = db.get_top_urls(cli_args.top);
+                let stats = db.get_stats();
 
                 if cli_args.show_urls {
                     println!(
                         "\nTop {} URLs (total unique: {}):",
-                        cli_args.top, unique_urls
+                        cli_args.top, stats.unique_urls
                     );
-                    println!("{:<50} | {:<10} | {:<10}", "URL", "Requests", "Type");
-                    println!("{:-<50}-+-{:-<10}-+-{:-<10}", "", "", "");
-                    for (url, entry) in top_urls {
+                    println!("{:<50} | {:<10}", "URL", "Requests");
+                    println!("{:-<50}-+-{:-<10}", "", "");
+                    for (url, count) in top_urls {
                         println!(
-                            "{:<50} | {:<10} | {:<10}",
-                            url, entry.count, entry.request_type
+                            "{:<50} | {:<10}",
+                            url, count
                         );
                     }
                 }
 
                 if cli_args.show_ips {
-                    println!("\nTop {} IPs (total unique: {}):", cli_args.top, unique_ips);
-                    println!("{:<15} | {:<10} | {:<10}", "IP", "Requests", "Type");
-                    println!("{:-<15}-+-{:-<10}-+-{:-<10}", "", "", "");
-                    for (ip, entry) in top_ips {
+                    println!("\nTop {} IPs (total unique: {}):", cli_args.top, stats.unique_ips);
+                    println!("{:<15} | {:<10}", "IP", "Requests");
+                    println!("{:-<15}-+-{:-<10}", "", "");
+                    for (ip, count) in top_ips {
                         println!(
-                            "{:<15} | {:<10} | {:<10}",
-                            ip, entry.count, entry.request_type
+                            "{:<15} | {:<10}",
+                            ip, count
                         );
                     }
                 }
@@ -393,7 +383,6 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
             let (tx, mut rx) = mpsc::channel(1);
 
             let app = Arc::new(StdMutex::new(App::new(AppConfig {
-                log_data: log_data.clone(),
                 enable_security: cli_args.enable_security,
                 enable_performance: cli_args.enable_performance,
                 enable_errors: cli_args.enable_errors,
@@ -401,51 +390,33 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
                 enable_sparkline: cli_args.enable_sparkline,
                 enable_heatmap: cli_args.enable_heatmap,
             })));
-            let app_clone = Arc::clone(&app);
-            let count_clone = count;
+
+            let _count_clone = count;
             let regex_pattern_clone = regex_pattern.clone();
             let date_format_clone = date_format.clone();
             let cli_args_clone = cli_args.clone();
+            let last_processed_line_clone = last_processed_line;
 
             let handle = tokio::spawn(async move {
-                let progress_callback = {
-                    let app = Arc::clone(&app_clone);
-                    move |progress| {
-                        let mut app = app
-                            .lock()
-                            .expect("Failed to acquire app lock for progress update");
-                        app.set_progress(progress);
-                        // Прогресс теперь отображается только в TUI интерфейсе
-                    }
-                };
+                let mut file_reader = FileReader::new(
+                    cli_args_clone.file.as_ref().unwrap().clone(),
+                    regex_pattern_clone,
+                    date_format_clone,
+                );
 
-                let mut last_processed_line: Option<usize> = None;
+                // Устанавливаем позицию на то место, где остановились
+                file_reader.set_last_processed_line(last_processed_line_clone);
+
                 loop {
                     if rx.try_recv().is_ok() {
                         break;
                     }
-                    let file_path = cli_args_clone
-                        .file
-                        .as_ref()
-                        .expect("File path should be Some when checking");
-                    match tail_file(
-                        file_path,
-                        count_clone,
-                        &regex_pattern_clone,
-                        &date_format_clone,
-                        &log_data_clone,
-                        last_processed_line,
-                        progress_callback.clone(),
-                    )
-                    .await
-                    {
-                        Ok(last_line) => {
-                            last_processed_line = last_line;
-                        }
-                        Err(e) => {
-                            error!("Error reading file: {:?}", e);
-                        }
+
+                    // Мониторинг новых строк (без подсчета количества строк)
+                    if let Err(e) = file_reader.monitor_new_lines_without_count() {
+                        error!("Error monitoring file: {:?}", e);
                     }
+
                     sleep(Duration::from_secs(1)).await;
                 }
             });
@@ -485,10 +456,4 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
             handle.await.expect("Failed to wait for background task");
 
             Ok(())
-        }
-        Err(e) => {
-            error!("Error reading file: {}", e);
-            Err(anyhow::anyhow!("Error reading file: {}", e))
-        }
-    }
 }
