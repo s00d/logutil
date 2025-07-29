@@ -9,12 +9,7 @@ pub mod requests;
 pub mod security;
 pub mod sparkline;
 
-pub use bots::BotsTab;
 pub use detailed::DetailedTab;
-pub use errors::ErrorsTab;
-pub use heatmap::HeatmapTab;
 pub use overview::OverviewTab;
-pub use performance::PerformanceTab;
 pub use requests::RequestsTab;
 pub use security::SecurityTab;
-pub use sparkline::SparklineTab;
