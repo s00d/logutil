@@ -2,28 +2,13 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     widgets::{
-        Block, Borders, Clear, Gauge, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+        Block, Borders, Clear, Gauge, Paragraph,
         Tabs, Wrap,
     },
     Frame,
 };
 
-/// Function to display simple progress bar in console with text
-pub fn draw_simple_progress_bar_with_text(progress: f64, text: &str) {
-    let bar_length = 50;
-    let filled_length = (progress * bar_length as f64) as usize;
-    let empty_length = bar_length - filled_length;
 
-    let filled = "█".repeat(filled_length);
-    let empty = "░".repeat(empty_length);
-    let percentage = (progress * 100.0) as usize;
-
-    if text.is_empty() {
-        eprint!("\r[{}] {}%", filled + &empty, percentage);
-    } else {
-        eprint!("\r[{}] {}% | {}", filled + &empty, percentage, text);
-    }
-}
 
 /// Function to hide progress bar (clears the line)
 pub fn hide_progress_bar() {
@@ -148,22 +133,5 @@ impl TuiManager {
         Rect::new(x, y, popup_width, popup_height)
     }
 
-    pub fn draw_scrollbar(
-        &self,
-        count: usize,
-        selected_index: usize,
-        frame: &mut Frame,
-        rect: Rect,
-    ) {
-        let mut scrollbar_state = ScrollbarState::default()
-            .content_length(count)
-            .position(selected_index);
-        frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight)
-                .begin_symbol(Some("↑"))
-                .end_symbol(Some("↓")),
-            rect,
-            &mut scrollbar_state,
-        );
-    }
+
 }
