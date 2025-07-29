@@ -1,5 +1,5 @@
-use crate::log_data::LogData;
-use crate::tui_manager::{TuiManager, PANEL_TITLE_STYLE, SELECTED_ITEM_STYLE, TEXT_FG_COLOR};
+use crate::memory_db::GLOBAL_DB;
+use crate::tui_manager::{PANEL_TITLE_STYLE, SELECTED_ITEM_STYLE, TEXT_FG_COLOR};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -19,7 +19,6 @@ struct DrawLastRequestsParams<'a, 'b> {
 }
 
 pub struct RequestsTab {
-    tui_manager: TuiManager,
     table_state: TableState,
     input: String,
     current_page: usize,
@@ -29,7 +28,6 @@ pub struct RequestsTab {
 impl RequestsTab {
     pub fn new() -> Self {
         let mut instance = Self {
-            tui_manager: TuiManager::new(),
             table_state: TableState::default(),
             input: String::new(),
             current_page: 0,
@@ -102,10 +100,8 @@ impl RequestsTab {
 
         params.frame.render_stateful_widget(
             Table::new(
-                params.rows.clone(),
-                [
-                    Constraint::Min(50), // Request content
-                ],
+                params.rows,
+                [Constraint::Min(50)],
             )
             .header(header)
             .block(
@@ -113,65 +109,50 @@ impl RequestsTab {
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::new().fg(Color::Rgb(144, 238, 144)))
-                    .title("Requests"),
+                    .title("Last Requests"),
             )
             .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[1],
             params.table_state,
         );
-
-        self.tui_manager.draw_scrollbar(
-            params.rows.len(),
-            params.table_state.selected().unwrap_or(0),
-            params.frame,
-            chunks[1],
-        );
     }
 
-    fn get_search_results<'a>(&self, log_data: &'a LogData) -> Vec<&'a String> {
-        if !self.input.is_empty() {
-            log_data
-                .by_ip
-                .iter()
-                .flat_map(|(_, entry)| &entry.last_requests)
-                .filter(|request| request.contains(&self.input))
-                .collect()
+    fn get_search_results(&mut self) -> Vec<String> {
+        let db = GLOBAL_DB.read().unwrap();
+        let records = db.get_all_records();
+        let all_results: Vec<String> = records.iter().map(|record| record.log_line.clone()).collect();
+
+        // Применяем фильтр поиска
+        if self.input.is_empty() {
+            all_results
         } else {
-            log_data
-                .by_ip
-                .values()
-                .flat_map(|entry| &entry.last_requests)
+            all_results
+                .iter()
+                .filter(|record| record.to_lowercase().contains(&self.input.to_lowercase()))
+                .cloned()
                 .collect()
         }
     }
 
     fn on_left(&mut self) {
-        if self.current_page > 0 {
-            self.current_page -= 1;
-            self.table_state.select(Some(0));
-        }
+        self.current_page = self.current_page.saturating_sub(1);
+        self.table_state.select(Some(0));
     }
 
     fn on_right(&mut self) {
-        if self.total_pages > 0 && self.current_page < self.total_pages - 1 {
-            self.current_page += 1;
-            self.table_state.select(Some(0));
-        }
+        self.current_page = self.current_page.saturating_add(1);
+        self.table_state.select(Some(0));
     }
 
-    pub fn copy_selected_to_clipboard(&self, log_data: &LogData) -> Option<String> {
-        if let Some(selected_index) = self.table_state.selected() {
-            let search_results = self.get_search_results(log_data);
-            let start = self.current_page * 100;
-            let end = (start + 100).min(search_results.len());
-
-            if selected_index < (end - start) {
-                let request = search_results[start + selected_index];
-
+    pub fn copy_selected_to_clipboard(&mut self) -> Option<String> {
+        if let Some(selected_idx) = self.table_state.selected() {
+            let search_results = self.get_search_results();
+            
+            if selected_idx < search_results.len() {
+                let selected_request = &search_results[selected_idx];
                 if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                    if clipboard.set_text(request).is_ok() {
-                        let message = "Copied to clipboard".to_string();
-                        return Some(message);
+                    if clipboard.set_text(selected_request).is_ok() {
+                        return Some(format!("Request copied to clipboard"));
                     }
                 }
             }
@@ -187,47 +168,71 @@ impl Default for RequestsTab {
 }
 
 impl super::base::Tab for RequestsTab {
-    fn draw(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let search_results = self.get_search_results(log_data);
-        let total_pages = (search_results.len() + 99) / 100;
-        let start = self.current_page * 100;
-        let end = (start + 100).min(search_results.len());
+    fn draw(&mut self, frame: &mut Frame, area: Rect) {
+        let search_results = self.get_search_results();
+        let items_per_page = 30; // Изменили на 30
+        let total_items = search_results.len();
+        self.total_pages = if total_items == 0 {
+            1
+        } else {
+            (total_items + items_per_page - 1) / items_per_page
+        };
 
-        let rows: Vec<Row> = search_results[start..end]
+        // Ограничиваем current_page
+        if self.current_page >= self.total_pages {
+            self.current_page = self.total_pages.saturating_sub(1);
+        }
+
+        let start_idx = self.current_page * items_per_page;
+        let end_idx = std::cmp::min(start_idx + items_per_page, total_items);
+
+        let rows: Vec<Row> = search_results
             .iter()
-            .map(|request| {
-                // Обрезаем запрос для отображения в таблице
-                let max_length = (area.width as f64 * 0.7) as usize - 5;
-                let display_text = if request.len() > max_length {
-                    format!("{}...", &request[..max_length])
-                } else {
-                    request.to_string()
-                };
-                Row::new(vec![
-                    Cell::from(display_text).style(Style::default().fg(TEXT_FG_COLOR))
-                ])
+            .skip(start_idx)
+            .take(end_idx - start_idx)
+            .enumerate()
+            .map(|(_i, request)| {
+                Row::new(vec![Cell::from(request.as_str()).style(
+                    Style::new()
+                        .fg(TEXT_FG_COLOR)
+                        .add_modifier(Modifier::BOLD),
+                )])
             })
             .collect();
 
-        // Обновляем total_pages для использования в on_right
-        self.total_pages = total_pages;
-
-        // Клонируем table_state для избежания конфликта заимствований
-        let mut table_state_clone = self.table_state.clone();
-        self.draw_last_requests(DrawLastRequestsParams {
+        let mut table_state = self.table_state.clone();
+        let params = DrawLastRequestsParams {
             frame,
             area,
             rows,
             input: &self.input,
             current_page: self.current_page,
-            total_pages,
-            table_state: &mut table_state_clone,
-        });
-        self.table_state = table_state_clone;
+            total_pages: self.total_pages,
+            table_state: &mut table_state,
+        };
+
+        self.draw_last_requests(params);
+        self.table_state = table_state;
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> bool {
         match key.code {
+            crossterm::event::KeyCode::Char(c) => {
+                self.input.push(c);
+                self.current_page = 0;
+                self.table_state.select(Some(0));
+                true
+            }
+            crossterm::event::KeyCode::Enter => {
+                self.copy_selected_to_clipboard();
+                true
+            }
+            crossterm::event::KeyCode::Backspace => {
+                self.input.pop();
+                self.current_page = 0;
+                self.table_state.select(Some(0));
+                true
+            }
             crossterm::event::KeyCode::Up => {
                 if let Some(selected) = self.table_state.selected() {
                     if selected > 0 {
@@ -237,14 +242,14 @@ impl super::base::Tab for RequestsTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
-                if let Some(selected) = self.table_state.selected() {
-                    // Получаем количество результатов для определения максимального индекса
-                    let search_results = self.get_search_results(log_data);
-                    let start = self.current_page * 100;
-                    let end = (start + 100).min(search_results.len());
-                    let page_items = end - start;
+                let search_results = self.get_search_results();
+                let items_per_page = 30; // Изменили на 30
+                let start_idx = self.current_page * items_per_page;
+                let end_idx = std::cmp::min(start_idx + items_per_page, search_results.len());
+                let current_page_items = end_idx - start_idx;
 
-                    if selected < page_items.saturating_sub(1) {
+                if let Some(selected) = self.table_state.selected() {
+                    if selected < current_page_items.saturating_sub(1) {
                         self.table_state.select(Some(selected + 1));
                     }
                 }
@@ -258,16 +263,7 @@ impl super::base::Tab for RequestsTab {
                 self.on_right();
                 true
             }
-            crossterm::event::KeyCode::Backspace => {
-                self.table_state.select(None);
-                self.input.pop();
-                true
-            }
-            crossterm::event::KeyCode::Char(c) => {
-                self.table_state.select(None);
-                self.input.push(c);
-                true
-            }
+
             _ => false,
         }
     }
