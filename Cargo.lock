@@ -771,15 +771,15 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "logutil"
-version = "0.13.0"
+version = "0.13.1"
 dependencies = [
  "anyhow",
  "arboard",
  "chrono",
  "crossterm 0.29.0",
  "env_logger",
- "lazy_static",
  "log",
+ "once_cell",
  "ratatui",
  "regex-lite",
  "structopt",
