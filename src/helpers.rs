@@ -1,11 +1,44 @@
 use crate::log_data::{LogData, LogEntryParams};
 use chrono::{DateTime, FixedOffset};
 use log::error;
-use regex::Regex;
+use regex_lite::Regex;
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex as StdMutex};
+
+// Кэш для скомпилированных регулярных выражений
+lazy_static::lazy_static! {
+    static ref REGEX_CACHE: Arc<StdMutex<HashMap<String, Regex>>> = Arc::new(StdMutex::new(HashMap::new()));
+}
+
+/// Получает или компилирует регулярное выражение с кэшированием
+fn get_or_compile_regex(pattern: &str) -> Result<Regex, String> {
+    // Проверяем кэш
+    if let Ok(cache) = REGEX_CACHE.lock() {
+        if let Some(regex) = cache.get(pattern) {
+            return Ok(regex.clone());
+        }
+    }
+
+    // Компилируем новое регулярное выражение
+    let regex = Regex::new(pattern)
+        .map_err(|e| format!("Failed to compile regex pattern '{}': {}", pattern, e))?;
+
+    // Сохраняем в кэш
+    if let Ok(mut cache) = REGEX_CACHE.lock() {
+        cache.insert(pattern.to_string(), regex.clone());
+    }
+
+    Ok(regex)
+}
+
+/// Предварительная валидация регулярного выражения
+pub fn validate_regex_pattern(pattern: &str) -> Result<(), String> {
+    Regex::new(pattern).map_err(|e| format!("Invalid regex pattern '{}': {}", pattern, e))?;
+    Ok(())
+}
 
 /// Tails a file and processes new lines
 pub async fn tail_file(
@@ -17,6 +50,11 @@ pub async fn tail_file(
     last_processed_line: Option<usize>,
     progress_callback: impl Fn(f64) + Send,
 ) -> std::io::Result<Option<usize>> {
+    // Предварительная валидация regex
+    if let Err(e) = validate_regex_pattern(regex_pattern) {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e));
+    }
+
     let file = OpenOptions::new().read(true).open(file_path)?;
 
     let metadata = file.metadata()?;
@@ -207,15 +245,12 @@ pub async fn process_line(
     date_format: &str,
     log_data: &Arc<StdMutex<LogData>>,
 ) -> std::io::Result<()> {
-    // Шаг 1: Компиляция регулярного выражения
-    let re = match Regex::new(regex_pattern) {
+    // Шаг 1: Получение скомпилированного регулярного выражения из кэша
+    let re = match get_or_compile_regex(regex_pattern) {
         Ok(re) => re,
         Err(e) => {
-            error!("Failed to compile regex pattern '{}': {}", regex_pattern, e);
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Invalid regex pattern: {}", e),
-            ));
+            error!("Regex compilation error: {}", e);
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e));
         }
     };
 
@@ -223,12 +258,8 @@ pub async fn process_line(
     let caps = match re.captures(line) {
         Some(caps) => caps,
         None => {
-            error!(
-                "Line does not match regex pattern '{}': {}",
-                regex_pattern,
-                line.trim()
-            );
-            return Ok(()); // Не критическая ошибка, продолжаем обработку
+            // Убираем логирование для несовпадающих строк - это нормально
+            return Ok(());
         }
     };
 
@@ -291,7 +322,7 @@ pub async fn process_line(
 }
 
 fn extract_captures_safe(
-    caps: &regex::Captures,
+    caps: &regex_lite::Captures,
 ) -> Result<(String, String, String, String, String), String> {
     let ip = caps.get(1).map_or("", |m| m.as_str()).to_string();
     let datetime_str = caps.get(2).map_or("", |m| m.as_str()).to_string();
