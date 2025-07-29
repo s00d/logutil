@@ -1,4 +1,4 @@
-use crate::log_data::LogData;
+use crate::memory_db::GLOBAL_DB;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -23,9 +23,10 @@ impl ErrorsTab {
         instance
     }
 
-    fn draw_errors_tab(&self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let (error_codes_count, error_urls_count, error_ips_count) = log_data.get_error_summary();
-        let top_errors = log_data.get_top_error_codes();
+    fn draw_errors_tab(&self, frame: &mut Frame, area: Rect) {
+        let db = GLOBAL_DB.read().unwrap();
+        let (error_codes_count, error_urls_count, error_ips_count) = db.get_error_stats();
+        let top_errors = db.get_top_status_codes(10);
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -108,7 +109,7 @@ impl ErrorsTab {
                     Constraint::Length(10), // Code
                     Constraint::Length(15), // Type
                     Constraint::Length(10), // Count
-                    Constraint::Min(15),    // Description
+                    Constraint::Min(20),    // Description
                 ],
             )
             .header(header)
@@ -117,7 +118,7 @@ impl ErrorsTab {
                     .borders(Borders::ALL)
                     .border_type(ratatui::widgets::BorderType::Rounded)
                     .border_style(Style::new().fg(Color::Rgb(255, 0, 255)))
-                    .title("Error Codes"),
+                    .title("Top Error Codes"),
             )
             .row_highlight_style(SELECTED_ITEM_STYLE),
             chunks[1],
@@ -133,11 +134,11 @@ impl Default for ErrorsTab {
 }
 
 impl super::base::Tab for ErrorsTab {
-    fn draw(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        self.draw_errors_tab(frame, area, log_data);
+    fn draw(&mut self, frame: &mut Frame, area: Rect) {
+        self.draw_errors_tab(frame, area);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 if let Some(selected) = self.table_state.selected() {
@@ -148,9 +149,9 @@ impl super::base::Tab for ErrorsTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
+                let db = GLOBAL_DB.read().unwrap();
+                let top_errors = db.get_top_status_codes(10);
                 if let Some(selected) = self.table_state.selected() {
-                    // Получаем количество ошибок для определения максимального индекса
-                    let top_errors = log_data.get_top_error_codes();
                     if selected < top_errors.len().saturating_sub(1) {
                         self.table_state.select(Some(selected + 1));
                     }
