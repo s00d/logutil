@@ -1,4 +1,4 @@
-use crate::log_data::LogData;
+use crate::memory_db::GLOBAL_DB;
 use crate::tui_manager::{HEADER_STYLE, SELECTED_ITEM_STYLE};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -13,16 +13,36 @@ pub struct SecurityTab {
     show_log_detail: bool,
     input: String,
     active_panel: usize, // 0 = left panel (IPs), 1 = right panel (logs)
+    suspicious_ips: Vec<(String, usize)>,
+    attack_patterns: Vec<(String, usize)>,
+    ip_patterns: std::collections::HashMap<String, Vec<String>>,
 }
 
 impl SecurityTab {
     pub fn new() -> Self {
+        // Загружаем данные сразу при создании
+        let db = GLOBAL_DB.read().unwrap();
+        let suspicious_ips = db.get_suspicious_ips();
+        let attack_patterns = db.get_attack_patterns();
+        
+        // Загружаем паттерны для каждого IP
+        let mut ip_patterns = std::collections::HashMap::new();
+        for (ip, _) in &suspicious_ips {
+            let patterns = db.get_suspicious_patterns_for_ip(ip);
+            // Убираем дубликаты
+            let unique_patterns: Vec<String> = patterns.into_iter().collect::<std::collections::HashSet<_>>().into_iter().collect();
+            ip_patterns.insert(ip.clone(), unique_patterns);
+        }
+
         let mut instance = Self {
             table_state: TableState::default(),
             log_detail_state: ListState::default(),
             show_log_detail: false,
             input: String::new(),
             active_panel: 0, // Начинаем с левой панели
+            suspicious_ips,
+            attack_patterns,
+            ip_patterns,
         };
 
         // Инициализируем выделение для таблицы
@@ -31,23 +51,11 @@ impl SecurityTab {
         instance
     }
 
-    fn draw_security_tab(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        let (suspicious_count, attack_patterns_count, rate_limit_count) =
-            log_data.get_security_summary();
-        let top_suspicious = log_data.get_top_suspicious_ips();
-
+    fn draw_security_tab(&mut self, frame: &mut Frame, area: Rect) {
         if self.show_log_detail {
-            self.draw_log_detail_view(frame, area, log_data);
+            self.draw_log_detail_view(frame, area);
         } else {
-            self.draw_main_security_view(
-                frame,
-                area,
-                log_data,
-                suspicious_count,
-                attack_patterns_count,
-                rate_limit_count,
-                &top_suspicious,
-            );
+            self.draw_main_security_view(frame, area);
         }
     }
 
@@ -55,11 +63,6 @@ impl SecurityTab {
         &mut self,
         frame: &mut Frame,
         area: Rect,
-        log_data: &LogData,
-        suspicious_count: usize,
-        attack_patterns_count: usize,
-        rate_limit_count: usize,
-        top_suspicious: &[(String, usize)],
     ) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -73,10 +76,10 @@ impl SecurityTab {
             .split(area);
 
         // Расширенная Security summary с дополнительными детектами
-        let additional_detections = self.get_additional_security_detections(log_data);
+        let additional_detections = self.get_additional_security_detections();
         let summary_text = format!(
-            "Suspicious IPs: {} | Attack Patterns: {} | Rate Limit Violations: {} | {}",
-            suspicious_count, attack_patterns_count, rate_limit_count, additional_detections
+            "Suspicious IPs: {} | Attack Patterns: {} | {}",
+            self.suspicious_ips.len(), self.attack_patterns.len(), additional_detections
         );
 
         frame.render_widget(
@@ -97,24 +100,22 @@ impl SecurityTab {
             .split(chunks[1]);
 
         // Левая панель - список подозрительных IP
-        self.draw_suspicious_ips_list(frame, main_chunks[0], top_suspicious, log_data);
+        self.draw_suspicious_ips_list(frame, main_chunks[0]);
 
         // Правая панель - детали логов или поиск
-        self.draw_log_details_panel(frame, main_chunks[1], log_data);
+        self.draw_log_details_panel(frame, main_chunks[1]);
     }
 
     fn draw_suspicious_ips_list(
         &mut self,
         frame: &mut Frame,
         area: Rect,
-        top_suspicious: &[(String, usize)],
-        log_data: &LogData,
     ) {
         // Фильтруем результаты поиска
         let filtered_suspicious = if self.input.is_empty() {
-            top_suspicious.to_owned()
+            self.suspicious_ips.clone()
         } else {
-            top_suspicious
+            self.suspicious_ips
                 .iter()
                 .filter(|(ip, _)| ip.to_lowercase().contains(&self.input.to_lowercase()))
                 .cloned()
@@ -124,8 +125,10 @@ impl SecurityTab {
         let rows: Vec<Row> = filtered_suspicious
             .iter()
             .map(|(ip, count)| {
-                let patterns = log_data.get_suspicious_patterns_for_ip(ip);
-                let threat_level = self.get_threat_level(ip, count, &patterns);
+                // Используем локальные паттерны
+                let empty_patterns = Vec::new();
+                let patterns = self.ip_patterns.get(ip).unwrap_or(&empty_patterns);
+                let threat_level = self.get_threat_level(ip, count, patterns);
                 let pattern_text = if patterns.is_empty() {
                     "Suspicious Activity".to_string()
                 } else {
@@ -221,7 +224,7 @@ impl SecurityTab {
         );
     }
 
-    fn draw_log_details_panel(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
+    fn draw_log_details_panel(&mut self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
@@ -248,8 +251,8 @@ impl SecurityTab {
         );
 
         // Детали логов для выбранного IP
-        if let Some(selected_ip) = self.get_selected_ip(log_data) {
-            let log_lines = self.get_highlighted_log_lines(log_data, &selected_ip);
+        if let Some(selected_ip) = self.get_selected_ip() {
+            let log_lines = self.get_highlighted_log_lines(&selected_ip);
             let items: Vec<ListItem> = log_lines
                 .iter()
                 .map(|line| {
@@ -284,7 +287,7 @@ impl SecurityTab {
         }
     }
 
-    fn draw_log_detail_view(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
+    fn draw_log_detail_view(&mut self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
@@ -305,8 +308,8 @@ impl SecurityTab {
         );
 
         // Log detail content
-        if let Some(selected_ip) = self.get_selected_ip(log_data) {
-            let log_lines = self.get_highlighted_log_lines(log_data, &selected_ip);
+        if let Some(selected_ip) = self.get_selected_ip() {
+            let log_lines = self.get_highlighted_log_lines(&selected_ip);
             let items: Vec<ListItem> = log_lines
                 .iter()
                 .map(|line| {
@@ -330,35 +333,36 @@ impl SecurityTab {
         }
     }
 
-    fn get_additional_security_detections(&self, log_data: &LogData) -> String {
+    fn get_additional_security_detections(&self) -> String {
+        let db = GLOBAL_DB.read().unwrap();
         let mut detections = Vec::new();
 
         // Детект SQL Injection
-        let sql_injection_count = self.detect_sql_injection(log_data);
+        let sql_injection_count = self.detect_sql_injection(&db);
         if sql_injection_count > 0 {
             detections.push(format!("SQL Injection: {}", sql_injection_count));
         }
 
         // Детект XSS
-        let xss_count = self.detect_xss(log_data);
+        let xss_count = self.detect_xss(&db);
         if xss_count > 0 {
             detections.push(format!("XSS: {}", xss_count));
         }
 
         // Детект Path Traversal
-        let path_traversal_count = self.detect_path_traversal(log_data);
+        let path_traversal_count = self.detect_path_traversal(&db);
         if path_traversal_count > 0 {
             detections.push(format!("Path Traversal: {}", path_traversal_count));
         }
 
         // Детект Command Injection
-        let cmd_injection_count = self.detect_command_injection(log_data);
+        let cmd_injection_count = self.detect_command_injection(&db);
         if cmd_injection_count > 0 {
             detections.push(format!("Command Injection: {}", cmd_injection_count));
         }
 
         // Детект Brute Force
-        let brute_force_count = self.detect_brute_force(log_data);
+        let brute_force_count = self.detect_brute_force(&db);
         if brute_force_count > 0 {
             detections.push(format!("Brute Force: {}", brute_force_count));
         }
@@ -370,14 +374,14 @@ impl SecurityTab {
         }
     }
 
-    fn detect_sql_injection(&self, log_data: &LogData) -> usize {
+    fn detect_sql_injection(&self, db: &crate::memory_db::MemoryDB) -> usize {
         let sql_patterns = [
             "'", "union", "select", "drop", "insert", "update", "delete", "exec", "xp_",
         ];
-        self.count_patterns_in_logs(log_data, &sql_patterns)
+        self.count_patterns_in_logs(db, &sql_patterns)
     }
 
-    fn detect_xss(&self, log_data: &LogData) -> usize {
+    fn detect_xss(&self, db: &crate::memory_db::MemoryDB) -> usize {
         let xss_patterns = [
             "<script>",
             "javascript:",
@@ -387,31 +391,35 @@ impl SecurityTab {
             "alert(",
             "document.cookie",
         ];
-        self.count_patterns_in_logs(log_data, &xss_patterns)
+        self.count_patterns_in_logs(db, &xss_patterns)
     }
 
-    fn detect_path_traversal(&self, log_data: &LogData) -> usize {
+    fn detect_path_traversal(&self, db: &crate::memory_db::MemoryDB) -> usize {
         let path_patterns = ["../", "..\\", "/etc/", "/proc/", "c:\\", "windows\\"];
-        self.count_patterns_in_logs(log_data, &path_patterns)
+        self.count_patterns_in_logs(db, &path_patterns)
     }
 
-    fn detect_command_injection(&self, log_data: &LogData) -> usize {
+    fn detect_command_injection(&self, db: &crate::memory_db::MemoryDB) -> usize {
         let cmd_patterns = [";", "|", "&", "`", "$(", "eval(", "system(", "exec("];
-        self.count_patterns_in_logs(log_data, &cmd_patterns)
+        self.count_patterns_in_logs(db, &cmd_patterns)
     }
 
-    fn detect_brute_force(&self, log_data: &LogData) -> usize {
+    fn detect_brute_force(&self, db: &crate::memory_db::MemoryDB) -> usize {
         // Подсчитываем IP с большим количеством запросов к auth endpoints
         let auth_patterns = ["/login", "/auth", "/admin", "/wp-admin"];
         let mut brute_force_count = 0;
 
-        for entry in log_data.by_ip.values() {
-            let auth_requests = entry
-                .last_requests
-                .iter()
-                .filter(|req| auth_patterns.iter().any(|pattern| req.contains(pattern)))
-                .count();
-            if auth_requests > 10 {
+        let all_records = db.get_all_records();
+        let mut ip_auth_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+        for record in all_records {
+            if auth_patterns.iter().any(|pattern| record.url.contains(pattern)) {
+                *ip_auth_counts.entry(record.ip.clone()).or_insert(0) += 1;
+            }
+        }
+
+        for count in ip_auth_counts.values() {
+            if *count > 10 {
                 brute_force_count += 1;
             }
         }
@@ -419,16 +427,16 @@ impl SecurityTab {
         brute_force_count
     }
 
-    fn count_patterns_in_logs(&self, log_data: &LogData, patterns: &[&str]) -> usize {
+    fn count_patterns_in_logs(&self, db: &crate::memory_db::MemoryDB, patterns: &[&str]) -> usize {
         let mut count = 0;
-        for entry in log_data.by_ip.values() {
-            for request in &entry.last_requests {
-                if patterns
-                    .iter()
-                    .any(|pattern| request.to_lowercase().contains(pattern))
-                {
-                    count += 1;
-                }
+        let all_records = db.get_all_records();
+        
+        for record in all_records {
+            if patterns
+                .iter()
+                .any(|pattern| record.log_line.to_lowercase().contains(pattern))
+            {
+                count += 1;
             }
         }
         count
@@ -444,13 +452,12 @@ impl SecurityTab {
         }
     }
 
-    fn get_selected_ip(&self, log_data: &LogData) -> Option<String> {
+    fn get_selected_ip(&self) -> Option<String> {
         if let Some(selected) = self.table_state.selected() {
-            let top_suspicious = log_data.get_top_suspicious_ips();
             let filtered_suspicious = if self.input.is_empty() {
-                top_suspicious
+                self.suspicious_ips.clone()
             } else {
-                top_suspicious
+                self.suspicious_ips
                     .iter()
                     .filter(|(ip, _)| ip.to_lowercase().contains(&self.input.to_lowercase()))
                     .cloned()
@@ -463,14 +470,14 @@ impl SecurityTab {
         }
     }
 
-    fn get_highlighted_log_lines(&self, log_data: &LogData, ip: &str) -> Vec<String> {
+    fn get_highlighted_log_lines(&self, ip: &str) -> Vec<String> {
         let mut highlighted_lines = Vec::new();
+        let db = GLOBAL_DB.read().unwrap();
+        let records = db.find_by_ip(ip);
 
-        if let Some(entry) = log_data.by_ip.get(ip) {
-            for request in &entry.last_requests {
-                let highlighted = self.highlight_suspicious_patterns(request);
-                highlighted_lines.push(highlighted);
-            }
+        for record in records {
+            let highlighted = self.highlight_suspicious_patterns(&record.log_line);
+            highlighted_lines.push(highlighted);
         }
 
         highlighted_lines
@@ -500,6 +507,35 @@ impl SecurityTab {
 
         highlighted
     }
+
+    pub fn copy_selected_to_clipboard(&self) -> Option<String> {
+        if self.active_panel == 0 {
+            // Копируем выбранный IP
+            if let Some(selected_ip) = self.get_selected_ip() {
+                if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                    if clipboard.set_text(selected_ip.clone()).is_ok() {
+                        return Some(format!("IP {} copied to clipboard", selected_ip));
+                    }
+                }
+            }
+        } else if self.active_panel == 1 {
+            // Копируем выбранную строку лога
+            if let Some(selected) = self.log_detail_state.selected() {
+                if let Some(selected_ip) = self.get_selected_ip() {
+                    let log_lines = self.get_highlighted_log_lines(&selected_ip);
+                    if selected < log_lines.len() {
+                        let selected_log = &log_lines[selected];
+                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                            if clipboard.set_text(selected_log.clone()).is_ok() {
+                                return Some(format!("Log line copied to clipboard"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 impl Default for SecurityTab {
@@ -509,11 +545,11 @@ impl Default for SecurityTab {
 }
 
 impl super::base::Tab for SecurityTab {
-    fn draw(&mut self, frame: &mut Frame, area: Rect, log_data: &LogData) {
-        self.draw_security_tab(frame, area, log_data);
+    fn draw(&mut self, frame: &mut Frame, area: Rect) {
+        self.draw_security_tab(frame, area);
     }
 
-    fn handle_input(&mut self, key: crossterm::event::KeyEvent, log_data: &LogData) -> bool {
+    fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> bool {
         match key.code {
             crossterm::event::KeyCode::Up => {
                 if self.show_log_detail {
@@ -535,11 +571,10 @@ impl super::base::Tab for SecurityTab {
                 } else if self.active_panel == 0 {
                     if let Some(selected) = self.table_state.selected() {
                         // Получаем количество подозрительных IP для определения максимального индекса
-                        let top_suspicious = log_data.get_top_suspicious_ips();
                         let filtered_suspicious = if self.input.is_empty() {
-                            top_suspicious.to_owned()
+                            self.suspicious_ips.clone()
                         } else {
-                            top_suspicious
+                            self.suspicious_ips
                                 .iter()
                                 .filter(|(ip, _)| {
                                     ip.to_lowercase().contains(&self.input.to_lowercase())
@@ -570,6 +605,17 @@ impl super::base::Tab for SecurityTab {
                 true
             }
             crossterm::event::KeyCode::Enter => {
+                // Enter копирует выбранный элемент в буфер обмена
+                self.copy_selected_to_clipboard();
+                true
+            }
+            crossterm::event::KeyCode::Char('q') => {
+                if self.show_log_detail {
+                    self.show_log_detail = false;
+                }
+                true
+            }
+            crossterm::event::KeyCode::Char('d') => {
                 if !self.show_log_detail {
                     self.show_log_detail = true;
                     self.log_detail_state.select(Some(0));
