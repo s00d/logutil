@@ -1,15 +1,18 @@
 use chrono::{DateTime, Local};
-use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind, MouseButton, DisableMouseCapture, EnableMouseCapture};
+use crossterm::event::{
+    DisableMouseCapture, EnableMouseCapture, KeyCode, KeyEvent, MouseButton, MouseEvent,
+    MouseEventKind,
+};
 use crossterm::execute;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Wrap, Clear},
+    widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table, TableState, Wrap},
     Frame,
 };
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, Instant};
+use std::time::{Instant, SystemTime};
 
 /// Форматирует размер файла в читаемом виде
 fn format_size(bytes: u64) -> String {
@@ -43,7 +46,7 @@ pub struct FileSettings {
     file_items: Vec<FileItem>,
     file_table_state: TableState,
     selected_file_index: usize,
-    
+
     // Settings
     selected_file: Option<PathBuf>,
     settings: Vec<Setting>,
@@ -51,13 +54,13 @@ pub struct FileSettings {
     selected_setting_index: usize,
     input_mode: bool,
     current_input: String,
-    
+
     // Panel management
     active_panel: usize, // 0 - file selector, 1 - settings
-    
+
     // Modal state
     modal_state: Option<ModalState>,
-    
+
     // Double click tracking
     last_click_time: Option<Instant>,
 }
@@ -286,10 +289,10 @@ impl FileSettings {
 
         // Левая панель - File Selector
         self.draw_file_selector(frame, chunks[0]);
-        
+
         // Правая панель - Settings
         self.draw_settings(frame, chunks[1]);
-        
+
         // Проверяем и обновляем состояние модального окна
         if let Some(modal) = &self.modal_state {
             if let Some(show_until) = modal.show_until {
@@ -318,24 +321,24 @@ impl FileSettings {
         // Заголовок с текущим путем
         let header_text = format!("📁 Current Directory: {}", self.current_path.display());
         let header_style = if self.active_panel == 0 {
-            Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)
+            Style::new()
+                .fg(Color::Rgb(144, 238, 144))
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::new().fg(Color::White)
         };
         frame.render_widget(
-            Paragraph::new(header_text)
-                .style(header_style)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(if self.active_panel == 0 {
-                            Style::new().fg(Color::Rgb(144, 238, 144))
-                        } else {
-                            Style::new().fg(Color::White)
-                        })
-                        .title("📂 File Selector"),
-                ),
+            Paragraph::new(header_text).style(header_style).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(if self.active_panel == 0 {
+                        Style::new().fg(Color::Rgb(144, 238, 144))
+                    } else {
+                        Style::new().fg(Color::White)
+                    })
+                    .title("📂 File Selector"),
+            ),
             chunks[0],
         );
 
@@ -459,24 +462,24 @@ impl FileSettings {
             "⚙️ Settings (Select a file first)".to_string()
         };
         let header_style = if self.active_panel == 1 {
-            Style::new().fg(Color::Rgb(144, 238, 144)).add_modifier(Modifier::BOLD)
+            Style::new()
+                .fg(Color::Rgb(144, 238, 144))
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::new().fg(Color::White)
         };
         frame.render_widget(
-            Paragraph::new(header_text)
-                .style(header_style)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .border_type(ratatui::widgets::BorderType::Rounded)
-                        .border_style(if self.active_panel == 1 {
-                            Style::new().fg(Color::Rgb(144, 238, 144))
-                        } else {
-                            Style::new().fg(Color::White)
-                        })
-                        .title("🔧 Configuration"),
-                ),
+            Paragraph::new(header_text).style(header_style).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_type(ratatui::widgets::BorderType::Rounded)
+                    .border_style(if self.active_panel == 1 {
+                        Style::new().fg(Color::Rgb(144, 238, 144))
+                    } else {
+                        Style::new().fg(Color::White)
+                    })
+                    .title("🔧 Configuration"),
+            ),
             chunks[0],
         );
 
@@ -544,7 +547,10 @@ impl FileSettings {
                         if checked { "[x]" } else { "[ ]" }.to_string()
                     }
                     _ => {
-                        if self.input_mode && index == self.selected_setting_index && self.active_panel == 1 {
+                        if self.input_mode
+                            && index == self.selected_setting_index
+                            && self.active_panel == 1
+                        {
                             format!("{} █", self.current_input)
                         } else {
                             setting.value.clone()
@@ -560,14 +566,15 @@ impl FileSettings {
 
         // Добавляем пункт запуска анализа только если файл выбран
         if self.selected_file.is_some() {
-            let start_style = if self.selected_setting_index == self.settings.len() && self.active_panel == 1 {
-                Style::new()
-                    .fg(Color::Black)
-                    .bg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::new().fg(Color::Yellow)
-            };
+            let start_style =
+                if self.selected_setting_index == self.settings.len() && self.active_panel == 1 {
+                    Style::new()
+                        .fg(Color::Black)
+                        .bg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::new().fg(Color::Yellow)
+                };
             rows.push(Row::new(vec![
                 Cell::from("▶ Start Analysis").style(start_style),
                 Cell::from("").style(Style::default()),
@@ -655,7 +662,12 @@ impl FileSettings {
         }
     }
 
-    pub fn handle_mouse(&mut self, mouse: MouseEvent, file_selector_area: Rect, settings_area: Rect) -> Option<FileSettingsAction> {
+    pub fn handle_mouse(
+        &mut self,
+        mouse: MouseEvent,
+        file_selector_area: Rect,
+        settings_area: Rect,
+    ) -> Option<FileSettingsAction> {
         if self.input_mode {
             return None; // Игнорируем мышь в режиме ввода
         }
@@ -694,7 +706,8 @@ impl FileSettings {
                 } else {
                     if self.selected_setting_index > 0 {
                         self.selected_setting_index -= 1;
-                        self.settings_table_state.select(Some(self.selected_setting_index));
+                        self.settings_table_state
+                            .select(Some(self.selected_setting_index));
                     }
                 }
             }
@@ -708,10 +721,15 @@ impl FileSettings {
                         self.update_selected_file();
                     }
                 } else {
-                    let max_index = if self.selected_file.is_some() { self.settings.len() } else { self.settings.len() - 1 };
+                    let max_index = if self.selected_file.is_some() {
+                        self.settings.len()
+                    } else {
+                        self.settings.len() - 1
+                    };
                     if self.selected_setting_index < max_index {
                         self.selected_setting_index += 1;
-                        self.settings_table_state.select(Some(self.selected_setting_index));
+                        self.settings_table_state
+                            .select(Some(self.selected_setting_index));
                     }
                 }
             }
@@ -720,7 +738,11 @@ impl FileSettings {
         None
     }
 
-    fn handle_file_selector_up(&mut self, _mouse: MouseEvent, _panel_area: Rect) -> Option<FileSettingsAction> {  
+    fn handle_file_selector_up(
+        &mut self,
+        _mouse: MouseEvent,
+        _panel_area: Rect,
+    ) -> Option<FileSettingsAction> {
         // Проверяем двойной клик
         if let Some(last_time) = self.last_click_time {
             let now = Instant::now();
@@ -741,14 +763,16 @@ impl FileSettings {
             // Сбрасываем отслеживание двойного клика
             self.last_click_time = None;
         }
-         // Сохраняем информацию для двойного клика
+        // Сохраняем информацию для двойного клика
         self.last_click_time = Some(Instant::now());
         None
     }
 
-
-
-    fn handle_file_selector_click(&mut self, mouse: MouseEvent, panel_area: Rect) -> Option<FileSettingsAction> {
+    fn handle_file_selector_click(
+        &mut self,
+        mouse: MouseEvent,
+        panel_area: Rect,
+    ) -> Option<FileSettingsAction> {
         // Получаем размеры layout из draw_file_selector
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -761,9 +785,9 @@ impl FileSettings {
                 .as_ref(),
             )
             .split(panel_area);
-        
+
         let table_area = chunks[1]; // Область таблицы
-        
+
         // Проверяем, что клик в области таблицы
         if mouse.row >= table_area.y && mouse.row < table_area.y + table_area.height {
             // Учитываем заголовок таблицы (1 строка) + верхнюю границу (1 строка)
@@ -773,9 +797,7 @@ impl FileSettings {
                 if row_index < self.file_items.len() {
                     self.selected_file_index = row_index;
                     self.file_table_state.select(Some(self.selected_file_index));
-                    
 
-                    
                     // Немедленно обрабатываем выбор файла
                     if let Some(item) = self.file_items.get(row_index) {
                         if item.is_parent {
@@ -802,7 +824,11 @@ impl FileSettings {
         None
     }
 
-    fn handle_settings_click(&mut self, mouse: MouseEvent, panel_area: Rect) -> Option<FileSettingsAction> {
+    fn handle_settings_click(
+        &mut self,
+        mouse: MouseEvent,
+        panel_area: Rect,
+    ) -> Option<FileSettingsAction> {
         // Получаем размеры layout из draw_settings
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -816,9 +842,9 @@ impl FileSettings {
                 .as_ref(),
             )
             .split(panel_area);
-        
+
         let table_area = chunks[2]; // Область таблицы настроек
-        
+
         // Проверяем, что клик в области таблицы
         if mouse.row >= table_area.y && mouse.row < table_area.y + table_area.height {
             // Учитываем заголовок таблицы (1 строка) + верхнюю границу (1 строка)
@@ -827,8 +853,9 @@ impl FileSettings {
                 let row_index = (mouse.row - data_start_y) as usize;
                 if row_index < self.settings.len() {
                     self.selected_setting_index = row_index;
-                    self.settings_table_state.select(Some(self.selected_setting_index));
-                    
+                    self.settings_table_state
+                        .select(Some(self.selected_setting_index));
+
                     // Немедленно обрабатываем выбор настройки
                     if let Some(setting) = self.settings.get_mut(row_index) {
                         match setting.input_type {
@@ -942,7 +969,8 @@ impl FileSettings {
                     // Навигация в настройках
                     if self.selected_setting_index > 0 {
                         self.selected_setting_index -= 1;
-                        self.settings_table_state.select(Some(self.selected_setting_index));
+                        self.settings_table_state
+                            .select(Some(self.selected_setting_index));
                     }
                 }
                 None
@@ -960,10 +988,15 @@ impl FileSettings {
                     }
                 } else {
                     // Навигация в настройках
-                    let max_index = if self.selected_file.is_some() { self.settings.len() } else { self.settings.len() - 1 };
+                    let max_index = if self.selected_file.is_some() {
+                        self.settings.len()
+                    } else {
+                        self.settings.len() - 1
+                    };
                     if self.selected_setting_index <= max_index {
                         self.selected_setting_index += 1;
-                        self.settings_table_state.select(Some(self.selected_setting_index));
+                        self.settings_table_state
+                            .select(Some(self.selected_setting_index));
                     }
                 }
                 None
@@ -989,7 +1022,9 @@ impl FileSettings {
                             self.selected_file = Some(item.path.clone());
                             // Проверяем, что файл существует
                             if item.path.exists() {
-                                return Some(FileSettingsAction::StartAnalysis(self.get_cli_args()));
+                                return Some(FileSettingsAction::StartAnalysis(
+                                    self.get_cli_args(),
+                                ));
                             } else {
                                 self.show_modal("Selected file does not exist!".to_string());
                                 return None;
@@ -1007,7 +1042,9 @@ impl FileSettings {
                         if let Some(file) = &self.selected_file {
                             // Проверяем, что файл существует
                             if file.exists() {
-                                return Some(FileSettingsAction::StartAnalysis(self.get_cli_args()));
+                                return Some(FileSettingsAction::StartAnalysis(
+                                    self.get_cli_args(),
+                                ));
                             }
                         }
                         // Если файл не выбран или не существует, показываем модальное окно
@@ -1104,15 +1141,15 @@ impl FileSettings {
             let area = frame.area();
             let popup_width = (area.width as f32 * 0.4) as u16;
             let popup_height = 8;
-            
+
             let x = area.x + (area.width.saturating_sub(popup_width)) / 2;
             let y = area.y + (area.height.saturating_sub(popup_height)) / 2;
-            
+
             let popup_area = Rect::new(x, y, popup_width, popup_height);
-            
+
             // Очищаем область под попапом
             frame.render_widget(Clear, popup_area);
-            
+
             // Создаем вертикальный layout для содержимого попапа
             let chunks = Layout::vertical([
                 Constraint::Length(3), // Заголовок
@@ -1122,19 +1159,19 @@ impl FileSettings {
             ])
             .spacing(0)
             .split(popup_area);
-            
+
             // Рисуем основной блок попапа
             let block = Block::default()
                 .title("⚠️ Warning")
                 .borders(Borders::ALL)
                 .border_type(ratatui::widgets::BorderType::Rounded)
                 .style(Style::default().bg(Color::Rgb(28, 28, 28)).fg(Color::White));
-            
+
             frame.render_widget(block, popup_area);
-            
+
             // Разбиваем сообщение на строки
             let lines: Vec<&str> = modal.message.split('\n').collect();
-            
+
             // Рисуем иконку и основное сообщение
             let icon = "⚠️";
             let message = format!("{} {}", icon, lines[0]);
@@ -1147,7 +1184,7 @@ impl FileSettings {
                 .alignment(ratatui::layout::Alignment::Center)
                 .wrap(Wrap { trim: true });
             frame.render_widget(paragraph, chunks[2]);
-            
+
             // Рисуем дополнительное сообщение (если есть)
             if lines.len() > 1 {
                 let submessage = Paragraph::new(lines[1])
@@ -1182,4 +1219,4 @@ pub struct CliArgs {
     pub enable_bots: bool,
     pub enable_sparkline: bool,
     pub enable_heatmap: bool,
-} 
+}

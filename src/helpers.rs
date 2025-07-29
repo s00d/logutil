@@ -1,6 +1,6 @@
 use crate::log_data::{LogData, LogEntryParams};
 use chrono::{DateTime, FixedOffset};
-use log::{error};
+use log::error;
 use regex::Regex;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
@@ -356,29 +356,30 @@ fn extract_additional_data_safe(
 
     // Парсим nginx лог формат: IP - - [DATE] TIME "METHOD" "REQUEST" STATUS SIZE "REFERER" "USER_AGENT"
     // Ищем статус код и размер ответа после кавычек
-    let quote_positions: Vec<usize> = line.char_indices()
+    let quote_positions: Vec<usize> = line
+        .char_indices()
         .filter(|(_, c)| *c == '"')
         .map(|(i, _)| i)
         .collect();
-    
+
     if quote_positions.len() >= 4 {
         // После второй кавычки должен быть статус код и размер
         let after_second_quote = &line[quote_positions[1] + 1..];
         let parts: Vec<&str> = after_second_quote.split_whitespace().collect();
-        
+
         if parts.len() >= 2 {
             // Первый элемент после кавычек - статус код
             if let Ok(code) = parts[0].parse::<u16>() {
                 status_code = Some(code);
             }
-            
+
             // Второй элемент - размер ответа
             if let Ok(size) = parts[1].parse::<u64>() {
                 response_size = Some(size);
             }
         }
     }
-    
+
     // User-Agent обычно находится в последних кавычках
     if quote_positions.len() >= 6 {
         let ua_start = quote_positions[quote_positions.len() - 2] + 1;

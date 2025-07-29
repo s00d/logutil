@@ -285,12 +285,12 @@ impl LogData {
             .by_ip
             .entry(params.ip.clone())
             .or_insert_with(|| LogEntry {
-            count: 0,
+                count: 0,
                 last_update: params.timestamp,
-            last_requests: Vec::new(),
+                last_requests: Vec::new(),
                 request_type: params.request_type.clone(),
                 request_domain: params.request_domain.clone(),
-            full_url: String::new(),
+                full_url: String::new(),
                 status_codes: HashMap::new(),
                 response_sizes: Vec::new(),
                 response_times: Vec::new(),
@@ -298,14 +298,14 @@ impl LogData {
                 suspicious_patterns: Vec::new(),
                 is_bot: false,
                 bot_type: None,
-        });
+            });
 
         entry.count += 1;
         entry.last_update = params.timestamp;
-        
+
         // Add new request to the beginning of the list
         entry.last_requests.insert(0, params.log_line);
-        
+
         // If the list exceeds 10 elements, remove the oldest one (last)
         if entry.last_requests.len() > 10 {
             entry.last_requests.pop();
@@ -343,9 +343,9 @@ impl LogData {
             .by_url
             .entry(params.url.clone())
             .or_insert_with(|| LogEntry {
-            count: 0,
+                count: 0,
                 last_update: params.timestamp,
-            last_requests: Vec::new(),
+                last_requests: Vec::new(),
                 request_type: params.request_type.clone(),
                 request_domain: params.request_domain.clone(),
                 full_url: params.full_url.clone(),
@@ -356,15 +356,15 @@ impl LogData {
                 suspicious_patterns: Vec::new(),
                 is_bot: false,
                 bot_type: None,
-        });
+            });
 
         entry.count += 1;
         entry.last_update = params.timestamp;
         entry.full_url = params.full_url;
-        
+
         // Add new request to the beginning of the list
         entry.last_requests.insert(0, params.log_line);
-        
+
         // If the list exceeds 10 elements, remove the oldest one (last)
         if entry.last_requests.len() > 10 {
             entry.last_requests.pop();

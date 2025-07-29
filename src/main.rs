@@ -1,10 +1,10 @@
 mod app;
+mod file_settings;
 mod helpers;
 mod log_data;
 mod tab_manager;
 mod tabs;
 mod tui_manager;
-mod file_settings;
 
 use crate::app::App;
 use app::AppConfig;
@@ -12,13 +12,20 @@ use app::AppConfig;
 use crossterm::{
     event::{self, Event},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen, Clear, ClearType},
+    terminal::{
+        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
 };
-use ratatui::{backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, Terminal};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::{Constraint, Direction, Layout, Rect},
+    Terminal,
+};
 
+use crate::file_settings::{CliArgs, FileSettings, FileSettingsAction};
 use crate::helpers::tail_file;
 use crate::log_data::LogData;
-use crate::file_settings::{FileSettings, FileSettingsAction, CliArgs};
 use crate::tui_manager::{draw_simple_progress_bar_with_text, hide_progress_bar};
 use anyhow::{Context, Result};
 use env_logger::Builder;
@@ -183,9 +190,11 @@ async fn run_interactive_mode(args: Cli) -> Result<()> {
     };
 
     let mut file_settings = FileSettings::new_with_args(&initial_cli_args);
-    
+
     // Включаем поддержку мыши
-    file_settings.enable_mouse().context("Failed to enable mouse")?;
+    file_settings
+        .enable_mouse()
+        .context("Failed to enable mouse")?;
 
     enable_raw_mode().context("Failed to enable raw mode")?;
     let mut stdout = std::io::stdout();
@@ -209,12 +218,16 @@ async fn run_interactive_mode(args: Cli) -> Result<()> {
                         match action {
                             FileSettingsAction::StartAnalysis(cli_args) => {
                                 // Выключаем мышь перед запуском анализа
-                                file_settings.disable_mouse().context("Failed to disable mouse")?;
+                                file_settings
+                                    .disable_mouse()
+                                    .context("Failed to disable mouse")?;
                                 return run_analysis_with_args(cli_args).await;
                             }
                             FileSettingsAction::Exit => {
                                 // Восстанавливаем терминал перед выходом
-                                file_settings.disable_mouse().context("Failed to disable mouse")?;
+                                file_settings
+                                    .disable_mouse()
+                                    .context("Failed to disable mouse")?;
                                 disable_raw_mode().context("Failed to disable raw mode")?;
                                 execute!(terminal.backend_mut(), LeaveAlternateScreen)
                                     .context("Failed to leave alternate screen")?;
@@ -227,24 +240,34 @@ async fn run_interactive_mode(args: Cli) -> Result<()> {
                 Event::Mouse(mouse) => {
                     let size = terminal.size()?;
                     let total_area = Rect::new(0, 0, size.width, size.height);
-                    
+
                     // Вычисляем области панелей так же, как в draw методе
                     let chunks = Layout::default()
                         .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                        .constraints(
+                            [Constraint::Percentage(50), Constraint::Percentage(50)].as_ref(),
+                        )
                         .split(total_area);
-                    
+
                     let file_selector_area = chunks[0];
                     let settings_area = chunks[1];
-                    
-                    if let Some(action) = file_settings.handle_mouse(mouse, file_selector_area, settings_area) {
+
+                    if let Some(action) =
+                        file_settings.handle_mouse(mouse, file_selector_area, settings_area)
+                    {
                         match action {
                             FileSettingsAction::StartAnalysis(cli_args) => {
                                 // Выключаем мышь перед запуском анализа
-                                file_settings.disable_mouse().context("Failed to disable mouse")?;
+                                file_settings
+                                    .disable_mouse()
+                                    .context("Failed to disable mouse")?;
                                 disable_raw_mode().context("Failed to disable raw mode")?;
-                                execute!(terminal.backend_mut(), LeaveAlternateScreen, Clear(ClearType::All))
-                                    .context("Failed to leave alternate screen")?;
+                                execute!(
+                                    terminal.backend_mut(),
+                                    LeaveAlternateScreen,
+                                    Clear(ClearType::All)
+                                )
+                                .context("Failed to leave alternate screen")?;
                                 return run_analysis_with_args(cli_args).await;
                             }
 
@@ -469,5 +492,3 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
         }
     }
 }
-
-

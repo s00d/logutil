@@ -218,8 +218,8 @@ impl App {
             .direction(Direction::Horizontal)
             .constraints(
                 [
-                Constraint::Percentage(30),
-                Constraint::Percentage(60),
+                    Constraint::Percentage(30),
+                    Constraint::Percentage(60),
                     Constraint::Percentage(10),
                 ]
                 .as_ref(),
@@ -239,7 +239,7 @@ impl App {
                     "Navigation",
                 )
                 .style(HEADER_STYLE)
-            .highlight_style(Style::new().fg(Color::White).bg(Color::Rgb(0, 95, 135))),
+                .highlight_style(Style::new().fg(Color::White).bg(Color::Rgb(0, 95, 135))),
             header_chunks[0],
         );
 
