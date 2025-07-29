@@ -193,60 +193,64 @@ impl MemoryDB {
         }
     }
 
-    // /// Поиск записей по домену
-    // pub fn find_by_domain(&self, domain: &str) -> Vec<LogRecord> {
-    //     let domain_index = self.domain_index.read().unwrap();
-    //     if let Some(ids) = domain_index.get(domain) {
-    //         let records = self.records.read().unwrap();
-    //         ids.iter()
-    //             .filter_map(|id| records.get(id).cloned())
-    //             .collect()
-    //     } else {
-    //         Vec::new()
-    //     }
-    // }
+    /// Поиск записей по домену
+    #[allow(dead_code)]
+    pub fn find_by_domain(&self, domain: &str) -> Vec<LogRecord> {
+        let domain_index = self.domain_index.read().unwrap();
+        if let Some(ids) = domain_index.get(domain) {
+            let records = self.records.read().unwrap();
+            ids.iter()
+                .filter_map(|id| records.get(id).cloned())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
 
-    // /// Поиск записей по временному диапазону
-    // pub fn find_by_timerange(&self, start_time: i64, end_time: i64) -> Vec<LogRecord> {
-    //     let timestamp_index = self.timestamp_index.read().unwrap();
-    //     let records = self.records.read().unwrap();
+    /// Поиск записей по временному диапазону
+    #[allow(dead_code)]
+    pub fn find_by_timerange(&self, start_time: i64, end_time: i64) -> Vec<LogRecord> {
+        let timestamp_index = self.timestamp_index.read().unwrap();
+        let records = self.records.read().unwrap();
         
-    //     let mut result = Vec::new();
-    //     for (_timestamp, ids) in timestamp_index.range(start_time..=end_time) {
-    //         for id in ids {
-    //             if let Some(record) = records.get(id) {
-    //                 result.push(record.clone());
-    //             }
-    //         }
-    //     }
-    //     result
-    // }
+        let mut result = Vec::new();
+        for (_timestamp, ids) in timestamp_index.range(start_time..=end_time) {
+            for id in ids {
+                if let Some(record) = records.get(id) {
+                    result.push(record.clone());
+                }
+            }
+        }
+        result
+    }
 
-    // /// Поиск записей по статус коду
-    // pub fn find_by_status_code(&self, status_code: u16) -> Vec<LogRecord> {
-    //     let status_code_index = self.status_code_index.read().unwrap();
-    //     if let Some(ids) = status_code_index.get(&status_code) {
-    //         let records = self.records.read().unwrap();
-    //         ids.iter()
-    //             .filter_map(|id| records.get(id).cloned())
-    //             .collect()
-    //     } else {
-    //         Vec::new()
-    //     }
-    // }
+    /// Поиск записей по статус коду
+    #[allow(dead_code)]
+    pub fn find_by_status_code(&self, status_code: u16) -> Vec<LogRecord> {
+        let status_code_index = self.status_code_index.read().unwrap();
+        if let Some(ids) = status_code_index.get(&status_code) {
+            let records = self.records.read().unwrap();
+            ids.iter()
+                .filter_map(|id| records.get(id).cloned())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
 
-    // /// Поиск записей по типу запроса
-    // pub fn find_by_request_type(&self, request_type: &str) -> Vec<LogRecord> {
-    //     let request_type_index = self.request_type_index.read().unwrap();
-    //     if let Some(ids) = request_type_index.get(request_type) {
-    //         let records = self.records.read().unwrap();
-    //         ids.iter()
-    //             .filter_map(|id| records.get(id).cloned())
-    //             .collect()
-    //     } else {
-    //         Vec::new()
-    //     }
-    // }
+    /// Поиск записей по типу запроса
+    #[allow(dead_code)]
+    pub fn find_by_request_type(&self, request_type: &str) -> Vec<LogRecord> {
+        let request_type_index = self.request_type_index.read().unwrap();
+        if let Some(ids) = request_type_index.get(request_type) {
+            let records = self.records.read().unwrap();
+            ids.iter()
+                .filter_map(|id| records.get(id).cloned())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
 
     /// Получение топ IP адресов
     pub fn get_top_ips(&self, limit: usize) -> Vec<(String, usize)> {
@@ -264,9 +268,7 @@ impl MemoryDB {
     /// Получение топ URL
     pub fn get_top_urls(&self, limit: usize) -> Vec<(String, usize)> {
         let url_index = self.url_index.read().unwrap();
-        
 
-        
         let mut url_counts: Vec<(String, usize)> = url_index
             .iter()
             .map(|(url, ids)| (url.clone(), ids.len()))
@@ -295,97 +297,99 @@ impl MemoryDB {
         records.values().cloned().collect()
     }
 
-    // /// Очистка старых записей (по времени)
-    // pub fn cleanup_old_records(&self, older_than_seconds: i64) {
-    //     let cutoff_time = SystemTime::now()
-    //         .duration_since(UNIX_EPOCH)
-    //         .unwrap()
-    //         .as_secs() as i64 - older_than_seconds;
+    /// Очистка старых записей (по времени)
+    #[allow(dead_code)]
+    pub fn cleanup_old_records(&self, older_than_seconds: i64) {
+        let cutoff_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64 - older_than_seconds;
 
-    //     let mut records = self.records.write().unwrap();
-    //     let mut ip_index = self.ip_index.write().unwrap();
-    //     let mut url_index = self.url_index.write().unwrap();
-    //     let mut domain_index = self.domain_index.write().unwrap();
-    //     let mut timestamp_index = self.timestamp_index.write().unwrap();
-    //     let mut status_code_index = self.status_code_index.write().unwrap();
-    //     let mut request_type_index = self.request_type_index.write().unwrap();
-    //     let mut user_agent_index = self.user_agent_index.write().unwrap();
+        let mut records = self.records.write().unwrap();
+        let mut ip_index = self.ip_index.write().unwrap();
+        let mut url_index = self.url_index.write().unwrap();
+        let mut domain_index = self.domain_index.write().unwrap();
+        let mut timestamp_index = self.timestamp_index.write().unwrap();
+        let mut status_code_index = self.status_code_index.write().unwrap();
+        let mut request_type_index = self.request_type_index.write().unwrap();
+        let mut user_agent_index = self.user_agent_index.write().unwrap();
 
-    //     let ids_to_remove: Vec<u64> = records
-    //         .iter()
-    //         .filter(|(_, record)| record.timestamp < cutoff_time)
-    //         .map(|(id, _)| *id)
-    //         .collect();
+        let ids_to_remove: Vec<u64> = records
+            .iter()
+            .filter(|(_, record)| record.timestamp < cutoff_time)
+            .map(|(id, _)| *id)
+            .collect();
 
-    //     for id in ids_to_remove {
-    //         if let Some(record) = records.remove(&id) {
-    //             // Удаляем из всех индексов
-    //             if let Some(ids) = ip_index.get_mut(&record.ip) {
-    //                 ids.retain(|&x| x != id);
-    //                 if ids.is_empty() {
-    //                     ip_index.remove(&record.ip);
-    //                 }
-    //             }
+        for id in ids_to_remove {
+            if let Some(record) = records.remove(&id) {
+                // Удаляем из всех индексов
+                if let Some(ids) = ip_index.get_mut(&record.ip) {
+                    ids.retain(|&x| x != id);
+                    if ids.is_empty() {
+                        ip_index.remove(&record.ip);
+                    }
+                }
 
-    //             if let Some(ids) = url_index.get_mut(&record.url) {
-    //                 ids.retain(|&x| x != id);
-    //                 if ids.is_empty() {
-    //                     url_index.remove(&record.url);
-    //                 }
-    //             }
+                if let Some(ids) = url_index.get_mut(&record.url) {
+                    ids.retain(|&x| x != id);
+                    if ids.is_empty() {
+                        url_index.remove(&record.url);
+                    }
+                }
 
-    //             if let Some(ids) = domain_index.get_mut(&record.request_domain) {
-    //                 ids.retain(|&x| x != id);
-    //                 if ids.is_empty() {
-    //                     domain_index.remove(&record.request_domain);
-    //                 }
-    //             }
+                if let Some(ids) = domain_index.get_mut(&record.request_domain) {
+                    ids.retain(|&x| x != id);
+                    if ids.is_empty() {
+                        domain_index.remove(&record.request_domain);
+                    }
+                }
 
-    //             if let Some(ids) = timestamp_index.get_mut(&record.timestamp) {
-    //                 ids.retain(|&x| x != id);
-    //                 if ids.is_empty() {
-    //                     timestamp_index.remove(&record.timestamp);
-    //                 }
-    //             }
+                if let Some(ids) = timestamp_index.get_mut(&record.timestamp) {
+                    ids.retain(|&x| x != id);
+                    if ids.is_empty() {
+                        timestamp_index.remove(&record.timestamp);
+                    }
+                }
 
-    //             if let Some(status_code) = record.status_code {
-    //                 if let Some(ids) = status_code_index.get_mut(&status_code) {
-    //                     ids.retain(|&x| x != id);
-    //                     if ids.is_empty() {
-    //                         status_code_index.remove(&status_code);
-    //                     }
-    //                 }
-    //             }
+                if let Some(status_code) = record.status_code {
+                    if let Some(ids) = status_code_index.get_mut(&status_code) {
+                        ids.retain(|&x| x != id);
+                        if ids.is_empty() {
+                            status_code_index.remove(&status_code);
+                        }
+                    }
+                }
 
-    //             if let Some(ids) = request_type_index.get_mut(&record.request_type) {
-    //                 ids.retain(|&x| x != id);
-    //                 if ids.is_empty() {
-    //                     request_type_index.remove(&record.request_type);
-    //                 }
-    //             }
+                if let Some(ids) = request_type_index.get_mut(&record.request_type) {
+                    ids.retain(|&x| x != id);
+                    if ids.is_empty() {
+                        request_type_index.remove(&record.request_type);
+                    }
+                }
 
-    //             if let Some(ref user_agent) = record.user_agent {
-    //                 if let Some(ids) = user_agent_index.get_mut(user_agent) {
-    //                     ids.retain(|&x| x != id);
-    //                     if ids.is_empty() {
-    //                         user_agent_index.remove(user_agent);
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+                if let Some(ref user_agent) = record.user_agent {
+                    if let Some(ids) = user_agent_index.get_mut(user_agent) {
+                        ids.retain(|&x| x != id);
+                        if ids.is_empty() {
+                            user_agent_index.remove(user_agent);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-    // /// Получение размера базы данных в памяти
-    // pub fn memory_usage(&self) -> usize {
-    //     let records = self.records.read().unwrap();
-    //     let ip_index = self.ip_index.read().unwrap();
-    //     let url_index = self.url_index.read().unwrap();
+    /// Получение размера базы данных в памяти
+    #[allow(dead_code)]
+    pub fn memory_usage(&self) -> usize {
+        let records = self.records.read().unwrap();
+        let ip_index = self.ip_index.read().unwrap();
+        let url_index = self.url_index.read().unwrap();
         
-    //     records.len() * std::mem::size_of::<LogRecord>() +
-    //     ip_index.len() * std::mem::size_of::<Vec<u64>>() +
-    //     url_index.len() * std::mem::size_of::<Vec<u64>>()
-    // }
+        records.len() * std::mem::size_of::<LogRecord>() +
+        ip_index.len() * std::mem::size_of::<Vec<u64>>() +
+        url_index.len() * std::mem::size_of::<Vec<u64>>()
+    }
 
     /// Получение записей по статус коду с лимитом
     pub fn get_top_status_codes(&self, limit: usize) -> Vec<(u16, usize)> {
@@ -400,31 +404,33 @@ impl MemoryDB {
         status_counts
     }
 
-    // /// Получение записей по типу запроса с лимитом
-    // pub fn get_top_request_types(&self, limit: usize) -> Vec<(String, usize)> {
-    //     let request_type_index = self.request_type_index.read().unwrap();
-    //     let mut type_counts: Vec<(String, usize)> = request_type_index
-    //         .iter()
-    //         .map(|(req_type, ids)| (req_type.clone(), ids.len()))
-    //         .collect();
+    /// Получение записей по типу запроса с лимитом
+    #[allow(dead_code)]
+    pub fn get_top_request_types(&self, limit: usize) -> Vec<(String, usize)> {
+        let request_type_index = self.request_type_index.read().unwrap();
+        let mut type_counts: Vec<(String, usize)> = request_type_index
+            .iter()
+            .map(|(req_type, ids)| (req_type.clone(), ids.len()))
+            .collect();
         
-    //     type_counts.sort_by(|a, b| b.1.cmp(&a.1));
-    //     type_counts.truncate(limit);
-    //     type_counts
-    // }
+        type_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        type_counts.truncate(limit);
+        type_counts
+    }
 
-    // /// Получение записей по домену с лимитом
-    // pub fn get_top_domains(&self, limit: usize) -> Vec<(String, usize)> {
-    //     let domain_index = self.domain_index.read().unwrap();
-    //     let mut domain_counts: Vec<(String, usize)> = domain_index
-    //         .iter()
-    //         .map(|(domain, ids)| (domain.clone(), ids.len()))
-    //         .collect();
+    /// Получение записей по домену с лимитом
+    #[allow(dead_code)]
+    pub fn get_top_domains(&self, limit: usize) -> Vec<(String, usize)> {
+        let domain_index = self.domain_index.read().unwrap();
+        let mut domain_counts: Vec<(String, usize)> = domain_index
+            .iter()
+            .map(|(domain, ids)| (domain.clone(), ids.len()))
+            .collect();
         
-    //     domain_counts.sort_by(|a, b| b.1.cmp(&a.1));
-    //     domain_counts.truncate(limit);
-    //     domain_counts
-    // }
+        domain_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        domain_counts.truncate(limit);
+        domain_counts
+    }
 
     /// Получение записей по User-Agent с лимитом
     pub fn get_top_user_agents(&self, limit: usize) -> Vec<(String, usize)> {
@@ -472,16 +478,17 @@ impl MemoryDB {
         error_records
     }
 
-    // /// Получение записей за последние N секунд
-    // pub fn get_recent_records(&self, seconds: i64) -> Vec<LogRecord> {
-    //     let current_time = SystemTime::now()
-    //         .duration_since(UNIX_EPOCH)
-    //         .unwrap()
-    //         .as_secs() as i64;
-    //     let start_time = current_time - seconds;
+    /// Получение записей за последние N секунд
+    #[allow(dead_code)]
+    pub fn get_recent_records(&self, seconds: i64) -> Vec<LogRecord> {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let start_time = current_time - seconds;
         
-    //     self.find_by_timerange(start_time, current_time)
-    // }
+        self.find_by_timerange(start_time, current_time)
+    }
 
     /// Получение статистики по временным интервалам
     pub fn get_time_series_data(&self, interval_seconds: i64) -> Vec<(i64, usize)> {
@@ -498,38 +505,40 @@ impl MemoryDB {
         result
     }
 
-    // /// Поиск записей по подстроке в логе
-    // pub fn search_logs(&self, query: &str) -> Vec<LogRecord> {
-    //     let records = self.records.read().unwrap();
-    //     records
-    //         .values()
-    //         .filter(|r| r.log_line.to_lowercase().contains(&query.to_lowercase()))
-    //         .cloned()
-    //         .collect()
-    // }
+    /// Поиск записей по подстроке в логе
+    #[allow(dead_code)]
+    pub fn search_logs(&self, query: &str) -> Vec<LogRecord> {
+        let records = self.records.read().unwrap();
+        records
+            .values()
+            .filter(|r| r.log_line.to_lowercase().contains(&query.to_lowercase()))
+            .cloned()
+            .collect()
+    }
 
-    // /// Получение уникальных значений для поля
-    // pub fn get_unique_values(&self, field: &str) -> Vec<String> {
-    //     match field {
-    //         "ip" => {
-    //             let ip_index = self.ip_index.read().unwrap();
-    //             ip_index.keys().cloned().collect()
-    //         }
-    //         "url" => {
-    //             let url_index = self.url_index.read().unwrap();
-    //             url_index.keys().cloned().collect()
-    //         }
-    //         "domain" => {
-    //             let domain_index = self.domain_index.read().unwrap();
-    //             domain_index.keys().cloned().collect()
-    //         }
-    //         "request_type" => {
-    //             let request_type_index = self.request_type_index.read().unwrap();
-    //             request_type_index.keys().cloned().collect()
-    //         }
-    //         _ => Vec::new(),
-    //     }
-    // }
+    /// Получение уникальных значений для поля
+    #[allow(dead_code)]
+    pub fn get_unique_values(&self, field: &str) -> Vec<String> {
+        match field {
+            "ip" => {
+                let ip_index = self.ip_index.read().unwrap();
+                ip_index.keys().cloned().collect()
+            }
+            "url" => {
+                let url_index = self.url_index.read().unwrap();
+                url_index.keys().cloned().collect()
+            }
+            "domain" => {
+                let domain_index = self.domain_index.read().unwrap();
+                domain_index.keys().cloned().collect()
+            }
+            "request_type" => {
+                let request_type_index = self.request_type_index.read().unwrap();
+                request_type_index.keys().cloned().collect()
+            }
+            _ => Vec::new(),
+        }
+    }
 
     /// Анализ безопасности - подозрительные IP
     pub fn get_suspicious_ips(&self) -> Vec<(String, usize)> {
@@ -588,20 +597,21 @@ impl MemoryDB {
         result
     }
 
-    // /// Анализ производительности - медленные запросы
-    // pub fn get_slow_requests(&self, threshold: f64) -> Vec<(String, f64)> {
-    //     let records = self.get_all_records();
-    //     let mut slow_requests: Vec<(String, f64)> = records
-    //         .into_iter()
-    //         .filter_map(|r| {
-    //             r.response_time.filter(|&time| time > threshold).map(|time| (r.url, time))
-    //         })
-    //         .collect();
+    /// Анализ производительности - медленные запросы
+    #[allow(dead_code)]
+    pub fn get_slow_requests(&self, threshold: f64) -> Vec<(String, f64)> {
+        let records = self.get_all_records();
+        let mut slow_requests: Vec<(String, f64)> = records
+            .into_iter()
+            .filter_map(|r| {
+                r.response_time.filter(|&time| time > threshold).map(|time| (r.url, time))
+            })
+            .collect();
         
-    //     slow_requests.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-    //     slow_requests.truncate(10);
-    //     slow_requests
-    // }
+        slow_requests.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        slow_requests.truncate(10);
+        slow_requests
+    }
 
     /// Анализ производительности - статистика времени ответа
     pub fn get_response_time_stats(&self) -> (f64, f64, f64) {
@@ -688,14 +698,15 @@ impl MemoryDB {
         stats.total_requests as f64 / (current_time + 1.0)
     }
 
-    // /// Получение последних запросов для IP
-    // pub fn get_last_requests_for_ip(&self, ip: &str, limit: usize) -> Vec<String> {
-    //     let records = self.find_by_ip(ip);
-    //     records.into_iter()
-    //         .map(|r| r.log_line)
-    //         .take(limit)
-    //         .collect()
-    // }
+    /// Получение последних запросов для IP
+    #[allow(dead_code)]
+    pub fn get_last_requests_for_ip(&self, ip: &str, limit: usize) -> Vec<String> {
+        let records = self.find_by_ip(ip);
+        records.into_iter()
+            .map(|r| r.log_line)
+            .take(limit)
+            .collect()
+    }
 
     /// Получение подозрительных паттернов для IP
     pub fn get_suspicious_patterns_for_ip(&self, ip: &str) -> Vec<String> {
@@ -723,21 +734,69 @@ impl MemoryDB {
     }
 
     /// Получение общего количества IP
+    #[allow(dead_code)]
     pub fn get_total_ips(&self) -> usize {
         let ip_index = self.ip_index.read().unwrap();
         ip_index.len()
     }
 
     /// Получение общего количества URL
+    #[allow(dead_code)]
     pub fn get_total_urls(&self) -> usize {
         let url_index = self.url_index.read().unwrap();
         url_index.len()
     }
 
     /// Получение общего количества запросов
+    #[allow(dead_code)]
     pub fn get_total_requests(&self) -> usize {
         let records = self.records.read().unwrap();
         records.len()
+    }
+
+    /// Очистка всех данных в базе
+    #[allow(dead_code)]
+    pub fn clear(&mut self) {
+        {
+            let mut records = self.records.write().unwrap();
+            records.clear();
+        }
+        {
+            let mut next_id = self.next_id.write().unwrap();
+            *next_id = 1;
+        }
+        {
+            let mut ip_index = self.ip_index.write().unwrap();
+            ip_index.clear();
+        }
+        {
+            let mut url_index = self.url_index.write().unwrap();
+            url_index.clear();
+        }
+        {
+            let mut domain_index = self.domain_index.write().unwrap();
+            domain_index.clear();
+        }
+        {
+            let mut timestamp_index = self.timestamp_index.write().unwrap();
+            timestamp_index.clear();
+        }
+        {
+            let mut status_code_index = self.status_code_index.write().unwrap();
+            status_code_index.clear();
+        }
+        {
+            let mut request_type_index = self.request_type_index.write().unwrap();
+            request_type_index.clear();
+        }
+        {
+            let mut user_agent_index = self.user_agent_index.write().unwrap();
+            user_agent_index.clear();
+        }
+        {
+            let mut stats = self.stats.write().unwrap();
+            *stats = DBStats::new();
+        }
     }
 }
 
