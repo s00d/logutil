@@ -44,6 +44,7 @@ textwrap = "0.16.2"
 env_logger = "0.11.8"
 anyhow = "1.0"
 arboard = "3.6.0"
+rayon = "1.8"
 
 [profile.release]
 opt-level = "z" # Оптимизация для размера
