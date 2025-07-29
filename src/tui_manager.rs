@@ -113,14 +113,14 @@ impl TuiManager {
 
         // Split message into lines
         let lines: Vec<&str> = message.split('\n').collect();
-
+        
         // Draw icon and main message
         let icon = "✓";
         let message = format!("{} {}", icon, lines[0]);
         let paragraph = Paragraph::new(message)
             .style(
                 Style::default()
-                    .fg(Color::Rgb(144, 238, 144))
+                .fg(Color::Rgb(144, 238, 144))
                     .add_modifier(Modifier::BOLD),
             )
             .alignment(ratatui::layout::Alignment::Center)
@@ -141,10 +141,10 @@ impl TuiManager {
     fn popup_area(&self, area: Rect, percent_x: u16, percent_y: u16) -> Rect {
         let popup_width = (area.width as f32 * (percent_x as f32 / 100.0)) as u16;
         let popup_height = (area.height as f32 * (percent_y as f32 / 100.0)) as u16;
-
+        
         let x = area.x + (area.width.saturating_sub(popup_width)) / 2;
         let y = area.y + (area.height.saturating_sub(popup_height)) / 2;
-
+        
         Rect::new(x, y, popup_width, popup_height)
     }
 
