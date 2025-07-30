@@ -27,7 +27,7 @@ pub struct LogEntryParams {
     /// Размер ответа в байтах
     pub response_size: Option<u64>,
     /// Время ответа в секундах
-    pub response_time: Option<f64>,
+    pub response_time: Option<f32>,
     /// User-Agent клиента
     pub user_agent: Option<String>,
 }
@@ -306,7 +306,7 @@ impl FileReader {
         
         let status_code = captures.get(6).and_then(|m| m.as_str().parse::<u16>().ok());
         let response_size = captures.get(7).and_then(|m| m.as_str().parse::<u64>().ok());
-        let response_time = captures.get(8).and_then(|m| m.as_str().parse::<f64>().ok());
+        let response_time = captures.get(8).and_then(|m| m.as_str().parse::<f32>().ok());
         let user_agent = captures.get(9).map(|m| m.as_str().to_string());
 
         // Парсим timestamp
