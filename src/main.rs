@@ -337,7 +337,7 @@ async fn run_analysis_with_args(cli_args: CliArgs) -> Result<()> {
     hide_progress_bar(); // Скрываем прогресс-бар
                                  // Output statistics to console if requested
             if cli_args.show_urls || cli_args.show_ips {
-                let db = crate::memory_db::GLOBAL_DB.read().unwrap();
+                let db = &*crate::memory_db::GLOBAL_DB;
                 let top_ips = db.get_top_ips(cli_args.top);
                 let top_urls = db.get_top_urls(cli_args.top);
                 let stats = db.get_stats();
