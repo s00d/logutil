@@ -298,9 +298,3 @@ fn test_duplicate_prevention() {
     let stats = db.get_stats();
     assert_eq!(stats.total_records, 2); // Обе записи добавлены
 }
-
-#[test]
-fn test_performance_with_large_dataset() {
-    // Этот тест перенесен в tests/performance_tests.rs
-    // для лучшей организации тестов производительности
-} 
