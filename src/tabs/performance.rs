@@ -24,7 +24,7 @@ impl PerformanceTab {
     }
 
     fn draw_performance_tab(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let (avg_time, max_time, min_time) = db.get_response_time_stats();
         let slow_requests = db.get_slow_requests_with_limit(1.0, 10);
         let requests_per_second = db.get_requests_per_second();
@@ -137,7 +137,7 @@ impl super::base::Tab for PerformanceTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 let slow_requests = db.get_slow_requests_with_limit(1.0, 10);
                 if let Some(selected) = self.table_state.selected() {
                     if selected < slow_requests.len().saturating_sub(1) {

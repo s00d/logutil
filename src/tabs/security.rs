@@ -21,7 +21,7 @@ pub struct SecurityTab {
 impl SecurityTab {
     pub fn new() -> Self {
         // Загружаем данные сразу при создании
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let suspicious_ips = db.get_suspicious_ips();
         let attack_patterns = db.get_attack_patterns();
         
@@ -334,7 +334,7 @@ impl SecurityTab {
     }
 
     fn get_additional_security_detections(&self) -> String {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let mut detections = Vec::new();
 
         // Детект SQL Injection
@@ -472,7 +472,7 @@ impl SecurityTab {
 
     fn get_highlighted_log_lines(&self, ip: &str) -> Vec<String> {
         let mut highlighted_lines = Vec::new();
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let records = db.find_by_ip(ip);
 
         for record in records {

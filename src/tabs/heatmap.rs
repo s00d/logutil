@@ -53,7 +53,7 @@ impl HeatmapTab {
     }
 
     fn draw_hourly_view(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let hourly_data = self.generate_hourly_data(&db);
 
         if hourly_data.is_empty() {
@@ -144,7 +144,7 @@ impl HeatmapTab {
     }
 
     fn draw_daily_view(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let daily_data = self.generate_daily_data(&db);
 
         if daily_data.is_empty() {
@@ -234,7 +234,7 @@ impl HeatmapTab {
     }
 
     fn draw_weekly_view(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let weekly_data = self.generate_weekly_data(&db);
 
         if weekly_data.is_empty() {
@@ -466,7 +466,7 @@ impl super::base::Tab for HeatmapTab {
                     0 => {
                         if let Some(selected) = self.hourly_table_state.selected() {
                             // Получаем количество часов для определения максимального индекса
-                            let db = GLOBAL_DB.read().unwrap();
+                            let db = &*GLOBAL_DB;
                             let hourly_data = self.generate_hourly_data(&db);
                             if selected < hourly_data.len().saturating_sub(1) {
                                 self.hourly_table_state.select(Some(selected + 1));
@@ -476,7 +476,7 @@ impl super::base::Tab for HeatmapTab {
                     1 => {
                         if let Some(selected) = self.daily_table_state.selected() {
                             // Получаем количество дней для определения максимального индекса
-                            let db = GLOBAL_DB.read().unwrap();
+                            let db = &*GLOBAL_DB;
                             let daily_data = self.generate_daily_data(&db);
                             if selected < daily_data.len().saturating_sub(1) {
                                 self.daily_table_state.select(Some(selected + 1));
@@ -486,7 +486,7 @@ impl super::base::Tab for HeatmapTab {
                     2 => {
                         if let Some(selected) = self.weekly_table_state.selected() {
                             // Получаем количество недель для определения максимального индекса
-                            let db = GLOBAL_DB.read().unwrap();
+                            let db = &*GLOBAL_DB;
                             let weekly_data = self.generate_weekly_data(&db);
                             if selected < weekly_data.len().saturating_sub(1) {
                                 self.weekly_table_state.select(Some(selected + 1));

@@ -24,7 +24,7 @@ impl BotsTab {
     }
 
     fn draw_bots_tab(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let (bot_ips_count, bot_types_count, bot_urls_count) = db.get_bot_stats();
         let top_user_agents = db.get_top_user_agents(10);
 
@@ -147,7 +147,7 @@ impl super::base::Tab for BotsTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 let top_user_agents = db.get_top_user_agents(10);
                 if let Some(selected) = self.table_state.selected() {
                     if selected < top_user_agents.len().saturating_sub(1) {

@@ -24,7 +24,7 @@ impl ErrorsTab {
     }
 
     fn draw_errors_tab(&self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let (error_codes_count, error_urls_count, error_ips_count) = db.get_error_stats();
         let top_errors = db.get_top_status_codes(10);
 
@@ -54,7 +54,8 @@ impl ErrorsTab {
         let items: Vec<Row> = top_errors
             .iter()
             .map(|(code, count)| {
-                let error_type = match code {
+                let status_code: i32 = code.parse().unwrap_or(0);
+                let error_type = match status_code {
                     400..=499 => "Client Error",
                     500..=599 => "Server Error",
                     _ => "Other Error",
@@ -149,7 +150,7 @@ impl super::base::Tab for ErrorsTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 let top_errors = db.get_top_status_codes(10);
                 if let Some(selected) = self.table_state.selected() {
                     if selected < top_errors.len().saturating_sub(1) {

@@ -43,7 +43,7 @@ impl SparklineTab {
     }
 
     fn draw_requests_sparkline(&self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let time_series_data = db.get_time_series_data(3600); // 1 hour intervals
 
         let mut data: Vec<u64> = time_series_data.iter().map(|(_, count)| *count as u64).collect();

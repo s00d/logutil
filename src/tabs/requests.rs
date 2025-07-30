@@ -118,7 +118,7 @@ impl RequestsTab {
     }
 
     fn get_search_results(&mut self) -> Vec<String> {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let records = db.get_all_records();
         let all_results: Vec<String> = records.iter().map(|record| record.log_line.clone()).collect();
 

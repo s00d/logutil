@@ -43,7 +43,7 @@ impl DetailedTab {
     }
 
     pub fn copy_selected_to_clipboard(&self) -> Option<String> {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         
         // Если выбран IP
         if let Some(ip_index) = self.ip_table_state.selected() {
@@ -86,7 +86,7 @@ impl DetailedTab {
 
     /// Formats an IP table row
     fn format_ip_item(&self, ip: &str, count: usize, _is_active: bool) -> Row {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let records = db.find_by_ip(ip);
         
         // Получаем время последнего запроса для этого IP
@@ -221,7 +221,7 @@ impl DetailedTab {
     }
 
     fn on_right(&mut self) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let top_ips = db.get_top_ips(self.top_n);
         if !top_ips.is_empty() {
             // Если IP не выбран, выбираем первый
@@ -242,7 +242,7 @@ impl Default for DetailedTab {
 
 impl super::base::Tab for DetailedTab {
     fn draw(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let top_ips = db.get_top_ips(self.top_n);
 
         // Формируем строки для IP таблицы
@@ -329,7 +329,7 @@ impl super::base::Tab for DetailedTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 
                 if self.request_list_state.selected().is_some() {
                     // Список запросов активен

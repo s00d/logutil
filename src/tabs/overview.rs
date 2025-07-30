@@ -37,7 +37,7 @@ impl OverviewTab {
     }
 
     fn draw_overview(&mut self, frame: &mut Frame, area: Rect) {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let top_ips = db.get_top_ips(self.top_n);
         let top_urls = db.get_top_urls(self.top_n);
         
@@ -193,7 +193,7 @@ impl OverviewTab {
     }
 
     fn format_ip_item(&self, ip: &str, count: usize, _index: usize) -> Row {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let records = db.find_by_ip(ip);
         
         // Получаем время последнего запроса для этого IP
@@ -227,7 +227,7 @@ impl OverviewTab {
     }
 
     fn format_url_item(&self, url: &str, count: usize, _index: usize) -> Row {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let records = db.find_by_url(url);
         
         // Получаем время последнего запроса для этого URL
@@ -298,7 +298,7 @@ impl OverviewTab {
     }
 
     pub fn copy_selected_to_clipboard(&self) -> Option<String> {
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         
         match self.overview_panel {
             0 => {
@@ -377,7 +377,7 @@ impl super::base::Tab for OverviewTab {
                 true
             }
             crossterm::event::KeyCode::Down => {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 match self.overview_panel {
                     0 => {
                         let top_ips = db.get_top_ips(self.top_n);
