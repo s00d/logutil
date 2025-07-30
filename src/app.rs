@@ -321,7 +321,7 @@ impl App {
             }
         }
         
-        let db = GLOBAL_DB.read().unwrap();
+        let db = &*GLOBAL_DB;
         let stats = db.get_stats();
         let now_time = chrono::Local::now();
         let result = (
