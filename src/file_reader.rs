@@ -163,7 +163,7 @@ impl FileReader {
             
             // Добавляем результаты в базу данных
             for record in results {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 db.insert(record);
             }
             
@@ -204,7 +204,7 @@ impl FileReader {
             
             // Добавляем результаты в базу данных
             for record in results {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 db.insert(record);
             }
             
@@ -242,7 +242,7 @@ impl FileReader {
             
             // Добавляем результаты в базу данных
             for record in results {
-                let db = GLOBAL_DB.read().unwrap();
+                let db = &*GLOBAL_DB;
                 db.insert(record);
             }
         }
