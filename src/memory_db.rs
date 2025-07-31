@@ -11,7 +11,9 @@ pub struct LogRecord {
     pub ip: String,
     pub url: String,
     pub timestamp: i64,
+    #[allow(dead_code)]
     pub request_type: String,
+    #[allow(dead_code)]
     pub request_domain: String,
     pub status_code: Option<u16>,
     pub response_size: Option<u64>,
@@ -432,6 +434,7 @@ impl MemoryDB {
     }
 
     /// Устанавливает максимальное количество записей
+    #[allow(dead_code)]
     pub fn set_max_records(&mut self, max_records: usize) {
         self.max_records = max_records;
     }
@@ -439,6 +442,7 @@ impl MemoryDB {
 
 
     /// Получает текущее использование памяти (приблизительно)
+    #[allow(dead_code)]
     pub fn get_memory_usage(&self) -> usize {
         let records_size = self.records.len() * std::mem::size_of::<LogRecord>();
         let ip_index_size = self.ip_index.len() * 64; // Приблизительно
@@ -450,6 +454,7 @@ impl MemoryDB {
     }
 
     /// Получает количество записей в базе данных
+    #[allow(dead_code)]
     pub fn get_records_count(&self) -> usize {
         self.records.len()
     }
