@@ -1,5 +1,5 @@
 use std::collections::{HashMap};
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, Ordering}};
+use std::sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}};
 use std::time::{SystemTime};
 use dashmap::DashMap;
 
@@ -31,7 +31,7 @@ pub struct LogRecord {
 pub struct MemoryDB {
     // Основные данные (без блокировок)
     records: DashMap<u64, LogRecord>,
-    next_id: AtomicU64,
+    next_id: AtomicUsize,
     
 
     
@@ -81,7 +81,7 @@ impl MemoryDB {
     pub fn new() -> Self {
         Self {
             records: DashMap::new(),
-            next_id: AtomicU64::new(1),
+            next_id: AtomicUsize::new(1),
             ip_index: DashMap::new(),
             url_index: DashMap::new(),
             status_code_index: DashMap::new(),
@@ -94,7 +94,7 @@ impl MemoryDB {
 
     /// Добавляет новую запись в базу данных (оптимизированная версия)
     pub fn insert(&self, record: LogRecord) -> u64 {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) as u64;
 
         // Проверяем лимит записей
         if self.records.len() >= self.max_records {
